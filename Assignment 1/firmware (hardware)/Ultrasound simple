@@ -1,0 +1,70 @@
+/*
+  HC-SR04: Pulse length and measured distance (for your table)
+
+  What this sketch prints (via Serial Monitor at 9600 baud):
+    - Pulse length: how long the ECHO pin stays HIGH
+      Units: microseconds (us) and milliseconds (ms)
+    - Measured distance: computed from the pulse length
+      Units: centimeters (cm)
+
+  Pin choice for the ENGR290 controller using connector P6:
+    TRIG  -> PB3  -> Arduino digital pin 11
+    ECHO  -> PD2  -> Arduino digital pin 2
+
+  Notes:
+    - The HC-SR04 distance formula comes from the speed of sound.
+      The sensor measures round-trip time (to obstacle and back),
+      so distance = (time * speed_of_sound) / 2.
+    - Typical approximation used in Arduino:
+      distance_cm ≈ pulse_us / 58.0
+*/
+
+const int TRIG_PIN = 11;  // TRIG signal output (PB3 on ATmega328P, Arduino D11)
+const int ECHO_PIN = 2;   // ECHO signal input  (PD2 on ATmega328P, Arduino D2)
+
+void setup() {
+  Serial.begin(9600);           // UART serial at 9600 bps (for Serial Monitor / PuTTY)
+  pinMode(TRIG_PIN, OUTPUT);    // TRIG is an output: we generate the trigger pulse
+  pinMode(ECHO_PIN, INPUT);     // ECHO is an input: we measure the returning pulse width
+
+  // Header line to make copy/paste into Excel easier
+  Serial.println("Pulse_us (us), Pulse_ms (ms), Distance_cm (cm)");
+}
+
+void loop() {
+  // 1) Send the trigger pulse to start a measurement
+  // HC-SR04 expects a 10 us HIGH pulse on TRIG
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);         // ensure clean LOW before the pulse
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);        // 10 us HIGH trigger
+  digitalWrite(TRIG_PIN, LOW);
+
+  // 2) Measure the width of the ECHO pulse
+  // pulseIn returns time in microseconds (us) while ECHO is HIGH
+  // timeout = 30000 us (30 ms) to avoid waiting forever (covers several meters)
+  unsigned long pulse_us = pulseIn(ECHO_PIN, HIGH, 30000);
+
+  // If pulse_us == 0, we hit the timeout: no echo detected
+  if (pulse_us == 0) {
+    Serial.println("NoEcho, NoEcho, NoEcho");
+    delay(200);
+    return;
+  }
+
+  // 3) Convert pulse length to milliseconds (ms) for your table
+  float pulse_ms = pulse_us / 1000.0;
+
+  // 4) Convert pulse length to distance in centimeters (cm)
+  // distance_cm ≈ pulse_us / 58.0 (standard HC-SR04 approximation)
+  float distance_cm = pulse_us / 58.0;
+
+  // 5) Print with units in the header and values in each column
+  Serial.print(pulse_us);         // microseconds (us)
+  Serial.print(", ");
+  Serial.print(pulse_ms, 3);      // milliseconds (ms), 3 decimals
+  Serial.print(", ");
+  Serial.println(distance_cm, 2); // centimeters (cm), 2 decimals
+
+  delay(200); // slow down printing (5 samples per second)
+}
