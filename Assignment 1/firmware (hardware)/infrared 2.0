@@ -1,0 +1,251 @@
+#define F_CPU 16000000UL
+
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include <util/delay.h>
+#include <stdint.h>
+#include <stdlib.h>
+
+/* ---------- User calibration ---------- */
+#define D1_CM      14.0f
+#define D2_CM      42.0f
+
+/* Measured 10-bit ADC values (0..1023) */
+#define ADC_D1     347     /* at 14 cm */
+#define ADC_D2     154     /* at 42 cm */
+
+/* Your measured ADC reference voltage from RV1 (AREF pin) */
+#define AREF_V     4.64f
+
+/* ---------- Pin mapping ---------- */
+/* IR on A0 = ADC0 = PC0 */
+#define IR_ADC_CHANNEL  0
+
+/* ENGR290 board pins:
+   LED "L" is PB5 and is ACTIVE LOW.
+   D3 brightness is PB3 = OC2A (Timer2 channel A). */
+#define LED_L_BIT     PB5
+#define PWM_D3_DDR    DDRB
+#define PWM_D3_BIT    PB3
+
+/* LED L ACTIVE LOW helpers */
+#define LED_L_ON()    (PORTB &= ~(1 << LED_L_BIT))
+#define LED_L_OFF()   (PORTB |=  (1 << LED_L_BIT))
+
+
+/* ---------- 1 ms time base for blinking ---------- */
+static volatile uint32_t g_ms = 0;
+
+ISR(TIMER0_COMPA_vect) {
+    g_ms++;
+}
+
+static void timer0_init_1ms(void) {
+    /* CTC mode, OCR0A=249 gives 1ms with prescaler 64
+       16MHz/64 = 250kHz, 250kHz/(249+1)=1kHz => 1ms */
+    TCCR0A = (1 << WGM01);
+    OCR0A  = 249;
+    TCCR0B = (1 << CS01) | (1 << CS00);
+    TIMSK0 = (1 << OCIE0A);
+}
+
+/* ---------- UART 9600 (TX only) ---------- */
+#define BAUD     9600UL
+#define UBRR_VAL ((F_CPU / (16UL * BAUD)) - 1UL)
+
+static void uart_init(void) {
+    UBRR0H = (uint8_t)(UBRR_VAL >> 8);
+    UBRR0L = (uint8_t)(UBRR_VAL & 0xFF);
+    UCSR0B = (1 << TXEN0);
+    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00); /* 8N1 */
+}
+
+static void uart_putc(char c) {
+    while (!(UCSR0A & (1 << UDRE0))) {}
+    UDR0 = c;
+}
+
+static void uart_puts(const char *s) {
+    while (*s) uart_putc(*s++);
+}
+
+static void uart_put_u16(uint16_t x) {
+    char buf[6];
+    itoa(x, buf, 10);
+    uart_puts(buf);
+}
+
+static void uart_put_i16(int16_t x) {
+    char buf[8];
+    itoa(x, buf, 10);
+    uart_puts(buf);
+}
+
+/* Print a float as fixed-point without printf: value * 100 as integer */
+static void uart_put_float_2(float v) {
+    int16_t x = (int16_t)(v * 100.0f + (v >= 0 ? 0.5f : -0.5f));
+    int16_t ip = x / 100;
+    int16_t fp = x % 100;
+    if (fp < 0) fp = -fp;
+
+    uart_put_i16(ip);
+    uart_putc('.');
+    if (fp < 10) uart_putc('0');
+    uart_put_u16((uint16_t)fp);
+}
+
+/* ---------- ADC (no analogRead) ---------- */
+static void adc_init_aref(uint8_t channel) {
+    /* REFS1:0 = 00 -> AREF external reference (RV1)
+       ADLAR = 0 -> right-adjusted 10-bit result
+       MUX = channel */
+    ADMUX = (channel & 0x07);
+
+    /* Enable ADC, prescaler 128 -> 16MHz/128 = 125kHz */
+    ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);
+}
+
+static uint16_t adc_read_blocking(void) {
+    ADCSRA |= (1 << ADSC);              /* start conversion */
+    while (ADCSRA & (1 << ADSC)) {}     /* wait */
+    return ADC;                         /* 10-bit result */
+}
+
+/* Your readIR_Average(n) in pure C */
+static uint16_t readIR_Average(uint8_t n) {
+    uint32_t sum = 0;
+    for (uint8_t i = 0; i < n; i++) {
+        sum += adc_read_blocking();
+        _delay_ms(2);
+    }
+    return (uint16_t)(sum / n);
+}
+
+/* ---------- PWM on D3 (ENGR290: PB3 = OC2A) ---------- */
+static void pwm_d3_init(void) {
+    PWM_D3_DDR |= (1 << PWM_D3_BIT);  /* PB3 output */
+
+    /* Fast PWM 8-bit on Timer2 (TOP=0xFF)
+       OC2A inverting mode: COM2A1=1, COM2A0=1
+       This is ideal if the LED hardware is active low:
+         duty=0   -> LED OFF
+         duty=255 -> LED FULL ON */
+    TCCR2A = (1 << WGM21) | (1 << WGM20) | (1 << COM2A1) | (1 << COM2A0);
+    TCCR2B = (1 << CS22);             /* prescaler 64 */
+
+    OCR2A = 0;                        /* start at 0% brightness */
+}
+
+/* duty = 0..255 where 0=0% brightness, 255=100% brightness */
+static void pwm_d3_set(uint8_t duty) {
+    OCR2A = duty;
+}
+
+/* ---------- Mapping ADC to PWM duty (0..255) ---------- */
+static uint8_t adc_to_duty(uint16_t adc) {
+    if (ADC_D1 == ADC_D2) return 0;
+
+    /* Linear mapping:
+       adc = ADC_D1 -> duty = 0
+       adc = ADC_D2 -> duty = 255
+       Outside range -> clamp to 0 or 255 */
+    int32_t num  = (int32_t)((int32_t)adc - (int32_t)ADC_D1) * 255;
+    int32_t den  = (int32_t)ADC_D2 - (int32_t)ADC_D1;
+    int32_t duty = num / den;
+
+    if (duty < 0)   duty = 0;
+    if (duty > 255) duty = 255;
+
+    return (uint8_t)duty;
+}
+
+/* Outside [d1,d2] check using ADC min/max */
+static uint8_t is_outside_range(uint16_t adc) {
+    uint16_t low  = (ADC_D1 < ADC_D2) ? ADC_D1 : ADC_D2;
+    uint16_t high = (ADC_D1 > ADC_D2) ? ADC_D1 : ADC_D2;
+    return (adc < low || adc > high);
+}
+
+/* Linear distance estimate (cm) based only on the two calibration points.
+   This is not the true sensor curve, but it matches the assignment’s linear requirement.
+   If you want more accuracy, replace with a piecewise or lookup-table based on more points. */
+static float adc_to_cm_linear(uint16_t adc) {
+    if (ADC_D1 == ADC_D2) return D1_CM;
+
+    /* t = (adc - ADC_D1) / (ADC_D2 - ADC_D1) so:
+       adc=ADC_D1 => t=0 => cm=D1
+       adc=ADC_D2 => t=1 => cm=D2 */
+    float t = ((float)adc - (float)ADC_D1) / ((float)ADC_D2 - (float)ADC_D1);
+    float cm = D1_CM + t * (D2_CM - D1_CM);
+
+    /* Clamp to a reasonable range */
+    if (cm < 0.0f) cm = 0.0f;
+    if (cm > 200.0f) cm = 200.0f;
+    return cm;
+}
+
+int main(void) {
+    /* LED L (PB5) output */
+    DDRB |= (1 << LED_L_BIT);
+    LED_L_OFF();
+
+
+
+    /* Init subsystems */
+    cli();
+    timer0_init_1ms();
+    adc_init_aref(IR_ADC_CHANNEL);
+    pwm_d3_init();
+    uart_init();
+    sei();
+
+    uart_puts("IR mode: ADC, V, cm, duty\r\n");
+
+    uint32_t last_toggle = 0;
+    uint8_t led_state = 0;
+
+    while (1) {
+        /* Read averaged ADC (10-bit) */
+        uint16_t adc = readIR_Average(60);
+
+        /* Convert to voltage using your measured AREF */
+        float v = ((float)adc * AREF_V) / 1023.0f;
+
+        /* Compute PWM duty and apply to D3 */
+        uint8_t duty = adc_to_duty(adc);
+        pwm_d3_set(duty);
+
+        /* Compute linear distance estimate for printing */
+        float cm = adc_to_cm_linear(adc);
+
+        /* Blink LED L with period 1s when outside [d1,d2] */
+        if (is_outside_range(adc)) {
+            if ((g_ms - last_toggle) >= 500) {  /* toggle every 500ms => 1s period */
+                last_toggle = g_ms;
+                led_state ^= 1;
+                if (led_state) LED_L_ON();
+                else           LED_L_OFF();
+            }
+        } else {
+            led_state = 0;
+            LED_L_OFF();
+        }
+
+        /* UART output */
+        uart_puts("ADC=");
+        uart_put_u16(adc);
+
+        uart_puts(" V=");
+        uart_put_float_2(v);
+
+        uart_puts(" cm=");
+        uart_put_float_2(cm);
+
+        uart_puts(" duty=");
+        uart_put_u16(duty);
+
+        uart_puts("\r\n");
+
+        _delay_ms(100);
+    }
+}
