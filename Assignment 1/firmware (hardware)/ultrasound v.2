@@ -71,7 +71,7 @@ static uint32_t millis_now(void) {
 
 // -------------- Pins selection --------------
 // Use P6 so PB5 stays free for LED "L"
-#define USE_P6 1
+#define USE_P13 1
 
 // D3 brightness uses PWM on PB3 (OC2A)
 #define D3_PWM_DDR   DDRB
@@ -82,16 +82,16 @@ static uint32_t millis_now(void) {
 #define LEDL_PORT    PORTB
 #define LEDL_BIT     PB5
 
-#if USE_P6
+#if USE_P13
   // P6: TRIG=PB3, ECHO=PD2
   #define TRIG_DDR   DDRB
   #define TRIG_PORT  PORTB
-  #define TRIG_BIT   PB3
+  #define TRIG_BIT   PB5
 
   #define ECHO_DDR   DDRD
   #define ECHO_PORT  PORTD
   #define ECHO_PINR  PIND
-  #define ECHO_BIT   PD2
+  #define ECHO_BIT   PD3
 #else
   // Not recommended here because TRIG would be PB5 and conflicts with LED "L"
   #define TRIG_DDR   DDRB
@@ -162,7 +162,7 @@ static uint8_t duty_from_distance_cm(uint16_t dcm) {
 static uint16_t measure_echo_ticks(void) {
     // We are using P6: TRIG is PB3, same as PWM output.
     // Disable PWM output briefly and send the 10us trigger.
-    pwm_d3_disconnect();
+    //pwm_d3_disconnect();
 
     // Trigger: LOW 2us, HIGH 10us, LOW
     TRIG_PORT &= ~(1 << TRIG_BIT);
@@ -171,7 +171,7 @@ static uint16_t measure_echo_ticks(void) {
     _delay_us(10);
     TRIG_PORT &= ~(1 << TRIG_BIT);
 
-    pwm_d3_reconnect();
+    //pwm_d3_reconnect();
 
     // Wait for Echo HIGH with timeout 30ms
     uint32_t start = millis_now();
