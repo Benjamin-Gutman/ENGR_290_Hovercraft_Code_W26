@@ -1,5 +1,5 @@
 const int IR_PIN = A0; //Pin at the beginning (0)
-const float VREF =5.0; //Reference value for the true voltage (Replace it with the value measured with the multimeter)
+const float VREF =4.64; //Reference value for the true voltage (Replace it with the value measured with the multimeter)
 
 int readIR_Average(int n) { //This reads the n values and gives us the average wich makes readings less noisy making the output more stable (But slower response)
   float sum = 0;
@@ -28,4 +28,5 @@ void loop() {
 }
 
 //300ms per update for the entire program (100*2ms)+100 ms
-
+//154 adc for 42 cm
+//347 adc for 14 cm
