@@ -1,32 +1,123 @@
-const int IR_PIN = A0; //Pin at the beginning (0)
-const float VREF =4.64; //Reference value for the true voltage (Replace it with the value measured with the multimeter)
+#include <stdint.h>
 
-int readIR_Average(int n) { //This reads the n values and gives us the average wich makes readings less noisy making the output more stable (But slower response)
-  float sum = 0;
+const int IR_PIN = A0;
+const float VREF = 4.64f;  // Your measured AREF (RV1) voltage
+
+/* Distance (cm) -> ADC (typical) from your measurements.
+   Points are ordered by distance ascending (cm increases).
+   In your data, ADC generally DECREASES as distance increases. */
+typedef struct {
+  uint16_t d_cm;
+  uint16_t adc;
+} CalPoint;
+
+static const CalPoint cal[] = {
+  {  7, 675 },
+  {  8, 625 },
+  { 10, 533 },
+  { 15, 385 },
+  { 20, 298 },
+  { 25, 251 },
+  { 30, 215 },
+  { 40, 174 },
+  { 50, 138 },
+  { 80,  96 }
+};
+
+#define CAL_N (sizeof(cal) / sizeof(cal[0]))
+
+/* Average n ADC samples (less noise, slower response) */
+int readIR_Average(int n) {
+  long sum = 0;
   for (int i = 0; i < n; i++) {
-    sum += analogRead(IR_PIN);//Measures the analog voltage on the A0 pin then uses Arduino's ADC to convert that voltage in a value 0-1023 (10 bits).
-    delay(2);//Waits 2 ms between ADC samples
+    sum += analogRead(IR_PIN);  // 0..1023
+    delay(2);
   }
-  return (int)(sum / n);//Average
+  return (int)(sum / n);
+}
+
+/* Forward function (optional): distance -> ADC using piecewise linear interpolation */
+static uint16_t adc_from_distance_cm(uint16_t d_cm) {
+  if (d_cm <= cal[0].d_cm) return cal[0].adc;
+  if (d_cm >= cal[CAL_N - 1].d_cm) return cal[CAL_N - 1].adc;
+
+  for (uint8_t i = 0; i < (CAL_N - 1); i++) {
+    uint16_t d0 = cal[i].d_cm;
+    uint16_t d1 = cal[i + 1].d_cm;
+
+    if (d_cm >= d0 && d_cm <= d1) {
+      int32_t a0 = (int32_t)cal[i].adc;
+      int32_t a1 = (int32_t)cal[i + 1].adc;
+
+      int32_t num = (a1 - a0) * (int32_t)(d_cm - d0);
+      int32_t den = (int32_t)(d1 - d0);
+
+      int32_t adc = a0 + (num / den);
+      if (adc < 0) adc = 0;
+      if (adc > 1023) adc = 1023;
+      return (uint16_t)adc;
+    }
+  }
+
+  return cal[CAL_N - 1].adc;
+}
+
+/* Inverse function (what you need): ADC -> distance (cm) using piecewise linear interpolation.
+   This assumes ADC is monotonic across your table (it mostly decreases as distance increases). */
+static float cm_from_adc_piecewise(uint16_t adc) {
+  uint16_t adc_near = cal[0].adc;           // at 7 cm (largest ADC)
+  uint16_t adc_far  = cal[CAL_N - 1].adc;   // at 80 cm (smallest ADC)
+
+  // Clamp outside the table range
+  if (adc >= adc_near) return (float)cal[0].d_cm;              // closer than 7 cm
+  if (adc <= adc_far)  return (float)cal[CAL_N - 1].d_cm;      // farther than 80 cm
+
+  // Find the segment where adc lies between (a0 -> a1)
+  for (uint8_t i = 0; i < (CAL_N - 1); i++) {
+    float d0 = (float)cal[i].d_cm;
+    float d1 = (float)cal[i + 1].d_cm;
+    float a0 = (float)cal[i].adc;
+    float a1 = (float)cal[i + 1].adc;
+
+    // Typical case: a0 > a1 (ADC decreases with distance)
+    if (a0 >= a1) {
+      if ((float)adc <= a0 && (float)adc >= a1) {
+        float t = ((float)adc - a0) / (a1 - a0);   // 0..1
+        return d0 + t * (d1 - d0);
+      }
+    } else {
+      // Fallback if any segment is increasing
+      if ((float)adc >= a0 && (float)adc <= a1) {
+        float t = ((float)adc - a0) / (a1 - a0);
+        return d0 + t * (d1 - d0);
+      }
+    }
+  }
+
+  return (float)cal[CAL_N - 1].d_cm;
 }
 
 void setup() {
-  Serial.begin(115200); //Start the communication link between computer and arduino. Comunication speed (Serial communciation speed between arduino and the computer. Arduino and the Serial Monitur must use the same baud rate or the text won't be readable)
-  Serial.println("IR on duty"); //Text to print when the IR starts reading information
+  Serial.begin(115200);
+  Serial.println("IR on duty");
 }
 
 void loop() {
-  int adc = readIR_Average(100); //(Analog-to-Digital converter) We can increase the number N to stabilize it more
-  float v = adc * (VREF/ 1023.0);//Arduino represents the voltage with 1024 (2^10) possible codes (0-1023) each corresponds to a small voltage step (ratio*reference voltage)
+  int adc = readIR_Average(100);
+  float vin = (float)adc * (VREF / 1023.0f);
+
+  // This uses your piecewise calibration table
+  float cm = cm_from_adc_piecewise((uint16_t)adc);
 
   Serial.print("ADC=");
   Serial.print(adc);
-  Serial.print("  V=");
-  Serial.println(v, 3); //Variable voltage is our estimate of the input voltage on the pin, computed from the ADC code.
 
-  delay(100);//Pauses the program for 100 ms
+  Serial.print("  Vin=");
+  Serial.print(vin, 3);
+  Serial.print(" V");
+
+  Serial.print("  cm=");
+  Serial.println(cm, 2);
+
+  delay(100);
 }
-
-//300ms per update for the entire program (100*2ms)+100 ms
-//154 adc for 42 cm
-//347 adc for 14 cm
