@@ -1,0 +1,138 @@
+//WORKING code tested with Wokwi simulator
+//But have to be cleaned up
+#define F_CPU 16000000UL
+#include <avr/io.h>
+#include <util/delay.h>
+#include <stdint.h>
+#define BAUD 9600UL
+#define UBRR_VALUE ((F_CPU/16/BAUD) - 1)
+
+void UartInitialize(void) //Configures Hardware (intialization) meant to be in setup() not in a loop
+{
+//Setting Baud Rate
+	UBRR0H = (uint8_t)(UBRR_VALUE >> 8); //Set speed
+    
+	UBRR0L = (uint8_t)(UBRR_VALUE & 0xFF);
+
+//8 data bits - no parity -  stop bit (8N1)
+	UCSR0C = (1 << UCSZ01) | (1 << UCSZ00); //Frame formatting
+
+//Enable transmitter (TX) on PD1
+	UCSR0B = (1 << TXEN0); //Enable the TX
+    
+}
+
+void UartPrintCharacter(char c) //Prints one character - Cuz uart can only send one byte at a time
+{
+	// Waiting until transmit buffer is empty
+	while (!(UCSR0A & (1 << UDRE0))) { } //UDRE0 becomes 1 when UART is ready for 1 byte
+
+
+	// Sending the byte
+	UDR0 = c; //send this byte
+}
+
+void UartPrintString(const char *s) //Sends a full string - just a loop of PrintC function
+{
+	while (*s) {
+	UartPrintCharacter(*s);
+	s++;
+    }
+}
+
+void UartAddNewLine(void) //Adds Lines
+{
+	UartPrintCharacter('\r');
+	UartPrintCharacter('\n');
+}
+
+void UartPrint_u16(uint16_t value) //prints numbers type u16 (used for distance)
+{
+	char buffer[6];//enough for 0–65535
+	uint8_t i = 0;
+
+	if (value == 0) {
+		UartPrintCharacter('0');
+			return;
+    }
+
+    while (value > 0) {
+			buffer[i++] = '0' + (value % 10);
+			value /= 10;
+    }
+    
+    while (i > 0) {
+			UartPrintCharacter(buffer[--i]);
+    }
+}
+//timer1 function
+void Timer1Function(void)
+{
+    TCCR1A = 0;// normal mode
+    TCCR1B = (1 << CS11); // Prescaler 8 (still not sure about this)
+    // (16 000 000 / 8 ) = 2 million ticks per second
+    // 1 tick = 0.05 us
+    
+    TCNT1 = 0;
+}
+
+
+//us measure function that returns a unint16_t
+uint16_t measure_distance(void)
+{
+    uint16_t start, end;
+    uint16_t ticks;
+
+    // To send 10us trigger pulse
+    PORTB &= ~(1 << PB3);
+    _delay_us(2);
+
+    PORTB |= (1 << PB3);
+    _delay_us(10);//10us
+
+    PORTB &= ~(1 << PB3);
+
+    // waits until echo HIGH
+    while (!(PIND & (1 << PD2)));
+
+    TCNT1 = 0;// reset timer
+    start = TCNT1;
+
+    // waits for echo low
+    while (PIND & (1 << PD2));
+
+    end = TCNT1;
+
+    ticks = end - start; //this is the timer value, how long the pulse took
+
+    // This just converts ticks to cm, returns the int value (distance)
+    return (ticks / 116);
+    //formula for this:
+    //Time = ticks*0.5
+    //Where 1 tick = 0.05us (assuming clock is 16MHz)
+    
+    //Since Distance = Time / 58 
+    //Then, Distance = (ticks*0.5) / 58 which is just Distance = ticks/116
+}
+
+int main(void)
+{
+    // Configure pins
+    DDRB |= (1 << PB3);// setting PB3 as output (the Trig)
+    DDRD &= ~(1 << PD2);// setting PD2 as input (echo)
+
+    UartInitialize();
+    Timer1Function();
+
+    while (1)
+    {
+        uint16_t distance = measure_distance();
+
+    UartPrintString("Distance: ");
+    UartPrint_u16(distance);
+	  UartPrintString(" cm");
+		UartAddNewLine();
+
+        _delay_ms(500);
+    }
+}
