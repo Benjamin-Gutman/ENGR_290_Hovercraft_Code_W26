@@ -3,6 +3,7 @@
 #define F_CPU 16000000UL
 #include <avr/io.h>
 #include <util/delay.h>
+#include <stdint.h>
 #define BAUD 9600UL
 #define UBRR_VALUE ((F_CPU/16/BAUD) - 1) //MUST DEFINE ALL OF THESE FOR THE CODE TO WORK
 
