@@ -1,0 +1,84 @@
+//UART FUNCTIONS
+
+#define F_CPU 16000000UL
+#include <avr/io.h>
+#include <util/delay.h>
+#define BAUD 9600UL
+#define UBRR_VALUE ((F_CPU/16/BAUD) - 1) //MUST DEFINE ALL OF THESE FOR THE CODE TO WORK
+
+void UartInitialize(void) //Configures Hardware (intialization) meant to be in setup() not in a loop
+{
+
+//Setting Baud Rate
+	UBRR0H = (uint8_t)(UBRR_VALUE >> 8); //Set speed
+    
+	UBRR0L = (uint8_t)(UBRR_VALUE & 0xFF);
+
+//8 data bits - no parity -  stop bit (8N1)
+	UCSR0C = (1 << UCSZ01) | (1 << UCSZ00); //Frame formatting
+
+//Enable transmitter (TX) on PD1
+	UCSR0B = (1 << TXEN0); //Enable the TX
+    
+}
+
+void UartPrintCharacter(char c) //Prints one character - Cuz uart can only send one byte at a time
+{
+	// Waiting until transmit buffer is empty
+	while (!(UCSR0A & (1 << UDRE0))) { } //UDRE0 becomes 1 when UART is ready for 1 byte
+
+
+	// Sending the byte
+	UDR0 = c; //send this byte
+}
+
+void UartPrintString(const char *s) //Sends a full string - just a loop of PrintC function
+{
+	while (*s) {
+	UartPrintCharacter(*s);
+	s++;
+    }
+}
+
+void UartAddNewLine(void) //Adds Lines
+{
+	UartPrintCharacter('\r');
+	UartPrintCharacter('\n');
+}
+
+void UartPrint_u16(uint16_t value) //prints numbers type u16 (used for distance)
+{
+	char buffer[6];//enough for 0–65535
+	uint8_t i = 0;
+
+	if (value == 0) {
+		UartPrintCharacter('0');
+			return;
+    }
+
+    while (value > 0) {
+			buffer[i++] = '0' + (value % 10);
+			value /= 10;
+    }
+    
+    while (i > 0) {
+			UartPrintCharacter(buffer[--i]);
+    }
+}
+
+
+int main(void)
+{
+
+	UartInitialize(); //Gets the Hardware ready for UART before using it
+	//This function must always be run once, to get the hardware to initialize to UART
+
+	uint16_t distance = 15;  // for test
+	
+	UartPrintString("Distance is: ");
+	UartPrint_u16(distance);
+	UartPrintString(" cm");
+	UartAddNewLine();
+	
+    
+}
