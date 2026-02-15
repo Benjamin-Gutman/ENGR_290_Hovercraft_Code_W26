@@ -1,0 +1,230 @@
+//UltraSonic code
+//Working code
+#define F_CPU 16000000UL
+#include <avr/io.h>
+#include <util/delay.h>
+#include <stdint.h>
+#define BAUD 9600UL
+#define UBRR_VALUE ((F_CPU/16/BAUD) - 1)
+
+void UartInitialize(void) //Configures Hardware (intialization) meant to be in setup() not in a loop
+{
+//Setting Baud Rate
+	UBRR0H = (uint8_t)(UBRR_VALUE >> 8); //Set speed
+    
+	UBRR0L = (uint8_t)(UBRR_VALUE & 0xFF);
+
+//8 data bits - no parity -  stop bit (8N1)
+	UCSR0C = (1 << UCSZ01) | (1 << UCSZ00); //Frame formatting
+
+//Enable transmitter (TX) on PD1
+	UCSR0B = (1 << TXEN0); //Enable the TX
+    
+}
+
+void UartPrintCharacter(char c) //Prints one character - Cuz uart can only send one byte at a time
+{
+	// Waiting until transmit buffer is empty
+	while (!(UCSR0A & (1 << UDRE0))) { } //UDRE0 becomes 1 when UART is ready for 1 byte
+
+
+	// Sending the byte
+	UDR0 = c; //send this byte
+}
+
+void UartPrintString(const char *s) //Sends a full string - just a loop of PrintC function
+{
+	while (*s) {
+	UartPrintCharacter(*s);
+	s++;
+    }
+}
+
+void UartAddNewLine(void) //Adds Lines
+{
+	UartPrintCharacter('\r');
+	UartPrintCharacter('\n');
+}
+
+void UartPrint_u16(uint16_t value) //prints numbers type u16 (used for distance)
+{
+	char buffer[6];//enough for 0–65535
+	uint8_t i = 0;
+
+	if (value == 0) {
+		UartPrintCharacter('0');
+			return;
+    }
+
+    while (value > 0) {
+			buffer[i++] = '0' + (value % 10);
+			value /= 10;
+    }
+    
+    while (i > 0) {
+			UartPrintCharacter(buffer[--i]);
+    }
+}
+//timer1 function
+void Timer1Function(void)
+{
+    TCCR1A = 0;// normal mode
+    TCCR1B = (1 << CS11); // Prescaler 8 (still not sure about this)
+    // (16 000 000 / 8 ) = 2 million ticks per second
+    // 1 tick = 0.05 us
+    
+    TCNT1 = 0;
+}
+
+
+//us measure function that returns a unint16_t
+uint16_t measure_distance(void)
+{
+    uint16_t start, end;
+    uint16_t ticks;
+
+    // To send 10us trigger pulse
+    PORTB &= ~(1 << PB3);
+    _delay_us(2);
+
+    PORTB |= (1 << PB3);
+    _delay_us(10);//10us
+
+    PORTB &= ~(1 << PB3);
+
+    // waits until echo HIGH
+    while (!(PIND & (1 << PD2)));
+
+    TCNT1 = 0;// reset timer
+    start = TCNT1;
+
+    // waits for echo low
+    while (PIND & (1 << PD2));
+
+    end = TCNT1;
+
+    ticks = end - start; //this is the timer value, how long the pulse took
+
+    // This just converts ticks to cm, returns the int value (distance)
+    return (ticks / 116);
+    //formula for this:
+    //Time = ticks*0.5
+    //Where 1 tick = 0.05us (assuming clock is 16MHz)
+    
+    //Since Distance = Time / 58 
+    //Then, Distance = (ticks*0.5) / 58 which is just Distance = ticks/116
+}
+
+//----LED LOGIC-----
+#define D1 14 //variable D1 = 14cm, D2 = 42cm
+#define D2 42
+
+uint8_t DistanceToPWM(uint16_t d)//function that takes a uint16_t parameter, which is just distance
+{
+//range of LED PMW is 0 to 255
+	if (d <= D1) return 0; //if d < 14, PMW is 0
+	if (d >= D2) return 255; //if d > 42, PWM is full brightness 255
+
+	
+	//Linearily increase between 14 and 42 (d1 -> d2)
+	//Formula: [(d - 14)*scaler] / range
+	// = [(d - 14) * 255 ] / (42 - 14)
+	
+	//----Calculating the values with intermediate variables----
+	uint16_t difference = d - D1;
+	///Here I'm using unint32_t because (d-D1) *255 is going to give a bigger value that can't fit in unint8
+	///But anyways it's going to get divided and going to be a value that's going to fit in uint8
+	uint32_t scaled = ((uint32_t)difference * 255);
+	uint32_t range = (D2 - D1);
+	
+	//---Final output PMW value---
+	uint8_t PWM = (scaled / range);
+	
+	return PWM;
+}
+	void PWM_D3_Initialize(void) //Set up for initializing the PMW on D3 using Timer2
+	{
+		DDRD |= (1 << PD3); //Setting PD3 as output (D3 LED)
+		
+		//Timer2(8-bit timer) -> for fast PWM
+		//Must make WGM21 = 1 and WGM20 = 1
+		TCCR2A |= (1 << WGM21) | (1 <<WGM20); //This command tells Timer2 to operate in FAST PWM MODE
+		//TCCR2A is timer control register
+		//WGM is the waveform generation mode
+		
+		//Output pin = PD3
+		TCCR2A |= (1 <<COM2B1); //connects timer2 to PD3
+		//COM2B1 = 1 -> makes non-inverting PWM mode
+		
+		
+		//Prescaler = 64 --> PWM frequency 976 Hz
+		TCCR2B |= (1 << CS22);
+		
+		//To start at default 0% brightness
+		OCR2B = 255; 
+		//now you can just assign the brightness value, 0-255 to OCR2B
+		//And it will control the LED
+		//But need to invert in main code because LEDS on board are active-low
+	}
+	
+	void LEDL_Initialize(void) //Setup blinking LEDL
+	{
+		DDRB |= (1 << PB5); //Setting PB5 as output
+		PORTB |= (1 << PB5); //Default is OFF if active low (=1 means OFF)
+	}
+	
+	void LEDL_Blink(uint16_t d)
+	{
+		uint8_t outofrange = (d < D1) || (d > D2);
+		//outofrange = 1 when d < 14 OR
+		//outofrange = 1 when d > 42
+		
+		if (outofrange == 1)
+		{
+				//Turn OFF PB5 - which means LED is ON, because LOW = OFF
+					PORTB ^= (1 << PB5);
+		}
+		else
+		{
+				PORTB |= (1 << PB5); //Keep PB5 ON, LED will be OFF
+		}
+	} //where's blinking?
+	//When you put it in a loop with delay_ms(500) in main(), it will blink with period 1s
+	
+	
+int main(void)
+{
+    // Configure pins - for US logic
+    DDRB |= (1 << PB3);// setting PB3 as output (the Trig)
+    PORTB &= ~(1 << PB3); //Trig default Low
+    
+    DDRD &= ~(1 << PD2);// setting PD2 as input (echo)
+    PORTD &= ~(1 <<PD2); //for no pull up on echo //disconnects pull up resistor
+    
+    //LED LOGIC initialization
+    PWM_D3_Initialize();
+    LEDL_Initialize();
+    
+		//Timer and UART initialization
+    UartInitialize();
+    Timer1Function();
+
+    while (1)
+    {
+//Measure distance
+    uint16_t distance = measure_distance();
+//LED
+		uint8_t PWM = DistanceToPWM(distance); //converts distance to PWM value
+		OCR2B = 255 - PWM; //Must invert because LED D3 is active low
+		
+		LEDL_Blink(distance); //LED L will blink if distance is outside range
+		
+//UART
+    UartPrintString("Distance: ");
+    UartPrint_u16(distance);
+	  UartPrintString(" cm");
+		UartAddNewLine();
+
+        _delay_ms(500);
+    }
+}
