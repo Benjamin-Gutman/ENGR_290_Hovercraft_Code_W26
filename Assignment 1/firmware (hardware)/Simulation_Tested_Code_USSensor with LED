@@ -82,19 +82,20 @@ void Timer1Function(void)
 // Initiates PWM
 void PWMInit(void)
 {
-    DDRD |= (1 << PD3);   
+    DDRB |= (1 << PB3);   
 
     // Fast PWM mode
-    TCCR2A = (1 << WGM20) | (1 << WGM21) | (1 << COM2B1);
+    TCCR2A = (1 << WGM20) | (1 << WGM21) | (1 << COM2A1) | (1 << COM2A0);
     TCCR2B = (1 << CS21);   // Prescaler 8
 
-    OCR2B = 255;   // Start at 0% duty
+    OCR2A = 0;   // Start at 0% duty
 }
 
 // Initiates the LED
 void LEDLInit(void)
 {
-    DDRB |= (1 << PB5);   
+    DDRB |= (1 << PB5);
+    PORTB |= (1 << PB5);   // LED L is active low, so this turns it OFF
 }
 
 // Determines the brightness of the LED
@@ -104,24 +105,25 @@ void LEDFunction(uint16_t distance)
 
     // Under 12cm, LED if OFF
     if (distance <= D1_CM)
-        OCR2B = 0;
+        OCR2A = 0;
     // Over 42cm, LED if fully ON
     else if (distance >= D2_CM)
-        OCR2B = 255;
+        OCR2A = 255;
     // Between 12 and 42cm, LED goes from 0% to 100%
     else
-        OCR2B = (uint8_t)(((distance - D1_CM) * 255) / (D2_CM - D1_CM));
+        OCR2A = (uint8_t)(((distance - D1_CM) * 255) / (D2_CM - D1_CM));
 
     // Blink L (LED on the board) when outside D1 or D2, otherwise it is off
     if (distance < D1_CM || distance > D2_CM)
     {
         blink ^= 1;
-        if (blink) PORTB |=  (1 << PB5);
-        else PORTB &= ~(1 << PB5);
+        if (blink) PORTB &= ~(1 << PB5);   // active low on
+        else PORTB |=  (1 << PB5);         // off
     }
     else
     {
-        PORTB &= ~(1 << PB5);
+        PORTB |= (1 << PB5);               // off (active low)
+        blink = 0;
     }
 }
 
@@ -134,13 +136,13 @@ uint16_t measure_distance(void)
     uint16_t ticks;
 
     // To send 10us trigger pulse
-    PORTB &= ~(1 << PB3);
+    PORTD &= ~(1 << PD4);
     _delay_us(2);
 
-    PORTB |= (1 << PB3);
+    PORTD |= (1 << PD4);
     _delay_us(10);//10us
 
-    PORTB &= ~(1 << PB3);
+    PORTD &= ~(1 << PD4);
 
     // waits until echo HIGH
     while (!(PIND & (1 << PD2)));
@@ -168,7 +170,7 @@ uint16_t measure_distance(void)
 int main(void)
 {
     // Configure pins
-    DDRB |= (1 << PB3);// setting PB3 as output (the Trig)
+    DDRD |= (1 << PD4);// setting PD4 as output (the Trig)
     DDRD &= ~(1 << PD2);// setting PD2 as input (echo)
 
     UartInitialize();
