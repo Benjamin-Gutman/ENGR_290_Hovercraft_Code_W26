@@ -1,3 +1,4 @@
+//To fix brightness
 //UltraSonic code
 //Working code
 #define F_CPU 16000000UL
@@ -84,22 +85,22 @@ uint16_t measure_distance(void)
     uint16_t ticks;
 
     // To send 10us trigger pulse
-    PORTB &= ~(1 << PB3);
+    PORTB &= ~(1 << PB4);
     _delay_us(2);
 
-    PORTB |= (1 << PB3);
+    PORTB |= (1 << PB4);
     _delay_us(10);//10us
 
-    PORTB &= ~(1 << PB3);
+    PORTB &= ~(1 << PB4);
 
     // waits until echo HIGH
-    while (!(PIND & (1 << PD2)));
+    while (!(PINB & (1 << PB0)));
 
     TCNT1 = 0;// reset timer
     start = TCNT1;
 
     // waits for echo low
-    while (PIND & (1 << PD2));
+    while (PINB & (1 << PB0));
 
     end = TCNT1;
 
@@ -109,7 +110,7 @@ uint16_t measure_distance(void)
     return (ticks / 116);
     //formula for this:
     //Time = ticks*0.5
-    //Where 1 tick = 0.05us (assuming clock is 16MHz)
+    //Where 1 tick = 0.5us (assuming clock is 16MHz)
     
     //Since Distance = Time / 58 
     //Then, Distance = (ticks*0.5) / 58 which is just Distance = ticks/116
@@ -144,24 +145,23 @@ uint8_t DistanceToPWM(uint16_t d)//function that takes a uint16_t parameter, whi
 }
 	void PWM_D3_Initialize(void) //Set up for initializing the PMW on D3 using Timer2
 	{
-		DDRD |= (1 << PD3); //Setting PD3 as output (D3 LED)
+		DDRB |= (1 << PB3); //Setting PB3 as output (D3 LED)
 		
 		//Timer2(8-bit timer) -> for fast PWM
 		//Must make WGM21 = 1 and WGM20 = 1
-		TCCR2A |= (1 << WGM21) | (1 <<WGM20); //This command tells Timer2 to operate in FAST PWM MODE
+		TCCR2A = (1 << WGM21) | (1 << WGM20) | (1 << COM2A1); //This command tells Timer2 to operate in FAST PWM MODE
 		//TCCR2A is timer control register
 		//WGM is the waveform generation mode
 		
-		//Output pin = PD3
-		TCCR2A |= (1 <<COM2B1); //connects timer2 to PD3
+		//Output pin = PB3
 		//COM2B1 = 1 -> makes non-inverting PWM mode
 		
 		
 		//Prescaler = 64 --> PWM frequency 976 Hz
-		TCCR2B |= (1 << CS22);
+		TCCR2B = (1 << CS22);
 		
 		//To start at default 0% brightness
-		OCR2B = 255; 
+		OCR2A = 255; 
 		//now you can just assign the brightness value, 0-255 to OCR2B
 		//And it will control the LED
 		//But need to invert in main code because LEDS on board are active-low
@@ -195,11 +195,11 @@ uint8_t DistanceToPWM(uint16_t d)//function that takes a uint16_t parameter, whi
 int main(void)
 {
     // Configure pins - for US logic
-    DDRB |= (1 << PB3);// setting PB3 as output (the Trig)
-    PORTB &= ~(1 << PB3); //Trig default Low
+    DDRB |= (1 << PB4);       // Trig output
+		PORTB &= ~(1 << PB4);     // default LOW//Trig default Low
     
-    DDRD &= ~(1 << PD2);// setting PD2 as input (echo)
-    PORTD &= ~(1 <<PD2); //for no pull up on echo //disconnects pull up resistor
+	  DDRB &= ~(1 << PB0);// setting PB0 as input (echo)
+    PORTB &= ~(1 <<PB0); //for no pull up on echo //disconnects pull up resistor
     
     //LED LOGIC initialization
     PWM_D3_Initialize();
@@ -215,7 +215,7 @@ int main(void)
     uint16_t distance = measure_distance();
 //LED
 		uint8_t PWM = DistanceToPWM(distance); //converts distance to PWM value
-		OCR2B = 255 - PWM; //Must invert because LED D3 is active low
+		OCR2A = 255 - PWM; //Must invert because LED D3 is active low
 		
 		LEDL_Blink(distance); //LED L will blink if distance is outside range
 		
