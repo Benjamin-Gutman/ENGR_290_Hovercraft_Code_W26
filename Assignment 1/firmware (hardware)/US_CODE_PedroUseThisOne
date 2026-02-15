@@ -1,4 +1,7 @@
-//To fix brightness
+//FINAL CODE
+//Pedro tested
+//Meant to be on P10
+//Brightness and everything works
 //UltraSonic code
 //Working code
 #define F_CPU 16000000UL
@@ -7,6 +10,10 @@
 #include <stdint.h>
 #define BAUD 9600UL
 #define UBRR_VALUE ((F_CPU/16/BAUD) - 1)
+
+//Global variable
+volatile uint16_t last_ticks = 0; //This will store the pulse length in timer ticks
+//To then print the pulse length value
 
 void UartInitialize(void) //Configures Hardware (intialization) meant to be in setup() not in a loop
 {
@@ -72,7 +79,7 @@ void Timer1Function(void)
     TCCR1A = 0;// normal mode
     TCCR1B = (1 << CS11); // Prescaler 8 (still not sure about this)
     // (16 000 000 / 8 ) = 2 million ticks per second
-    // 1 tick = 0.05 us
+    // 1 tick = 0.5 us
     
     TCNT1 = 0;
 }
@@ -105,7 +112,9 @@ uint16_t measure_distance(void)
     end = TCNT1;
 
     ticks = end - start; //this is the timer value, how long the pulse took
-
+		last_ticks = ticks; //Store the ticks to output pulse length 
+		//See global variable last_ticks
+		
     // This just converts ticks to cm, returns the int value (distance)
     return (ticks / 116);
     //formula for this:
@@ -181,12 +190,12 @@ uint8_t DistanceToPWM(uint16_t d)//function that takes a uint16_t parameter, whi
 		
 		if (outofrange == 1)
 		{
-				//Turn OFF PB5 - which means LED is ON, because LOW = OFF
-					PORTB ^= (1 << PB5);
+				//toggling with XOR
+					PORTB ^= (1 << PB5); //blink
 		}
 		else
 		{
-				PORTB |= (1 << PB5); //Keep PB5 ON, LED will be OFF
+				PORTB |= (1 << PB5); //Keep PB5 ON, LED will be ON
 		}
 	} //where's blinking?
 	//When you put it in a loop with delay_ms(500) in main(), it will blink with period 1s
@@ -219,12 +228,20 @@ int main(void)
 		
 		LEDL_Blink(distance); //LED L will blink if distance is outside range
 		
-//UART
+//Outputing distance
     UartPrintString("Distance: ");
     UartPrint_u16(distance);
 	  UartPrintString(" cm");
 		UartAddNewLine();
-
+//outputing pulse length
+uint16_t pulse_us = last_ticks / 2;
+UartPrintString("Pulse: ");
+UartPrint_u16(pulse_us);
+UartPrintString(" us");
+UartAddNewLine();
+//Formula for distance(cm) = pulse_us / 58 
+//With timer1, prescaler 8, 1 tick is 0.5us
+//Where timer1 is 2MHz (with prescaler 8)
         _delay_ms(500);
     }
 }
