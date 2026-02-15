@@ -239,7 +239,7 @@ UartPrintString("Pulse: ");
 UartPrint_u16(pulse_us);
 UartPrintString(" us");
 UartAddNewLine();
-//Formula for distance(cm) = pulse_us / 58 
+//Formula for distance(cm) = pulse_us / 58 (comes from US sensor data sheet)
 //With timer1, prescaler 8, 1 tick is 0.5us
 //Where timer1 is 2MHz (with prescaler 8)
         _delay_ms(500);
