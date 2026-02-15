@@ -102,10 +102,13 @@ void LEDFunction(uint16_t distance)
 {
     uint8_t blink = 0;
 
+    // Under 12cm, LED if OFF
     if (distance <= D1_CM)
         OCR2B = 0;
+    // Over 42cm, LED if fully ON
     else if (distance >= D2_CM)
         OCR2B = 255;
+    // Between 12 and 42cm, LED goes from 0% to 100%
     else
         OCR2B = (uint8_t)(((distance - D1_CM) * 255) / (D2_CM - D1_CM));
 
