@@ -100,7 +100,7 @@ void LEDLInit(void)
 // Determines the brightness of the LED
 void LEDFunction(uint16_t distance)
 {
-    uint8_t blink = 0;
+    static uint8_t blink = 0;
 
     // Under 12cm, LED if OFF
     if (distance <= D1_CM)
