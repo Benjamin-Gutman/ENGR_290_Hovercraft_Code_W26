@@ -203,12 +203,13 @@ static uint8_t duty_from_cm(float cm) {
     return (uint8_t)duty;
 }
 
+
 int main(void) {
-    /* LED L output */
+       // LED L output/
     DDRB |= (1 << LED_L_BIT);
     LED_L_OFF();
 
-    /* Ensure PC3 is input and no pull-up */
+    //Ensure PC3 is input and no pull-up /
     DDRC  &= ~(1 << PC3);
     PORTC &= ~(1 << PC3);
 
@@ -218,10 +219,13 @@ int main(void) {
     pwm_d3_init();
     uart_init();
 
-    /* Dummy conversion */
+    // Dummy conversion */
     (void)adc_read_blocking();
 
     sei();
+
+    // FORCE D3 TO 50% BRIGHTNESS FOR TESTING
+    pwm_d3_set(128);  // <--- New line to be added here
 
     uart_puts("IR mode (ADC3/PC3): ADC, V, cm(extrap), duty\r\n");
 
@@ -229,41 +233,63 @@ int main(void) {
     uint8_t led_state = 0;
 
     while (1) {
+
         uint16_t adc = readIR_Average(60);
 
+
+
         float v  = ((float)adc * AREF_V) / 1023.0f;
+
         float cm = cm_from_adc_piecewise_extrap(adc);
 
+
+
         uint8_t duty = duty_from_cm(cm);
+
         pwm_d3_set(duty);
 
+
+
+        cli();                  // Disable interrupts
+
+        uint32_t current_ms = g_ms; // Copy the value safely
+
+        sei();                  // Re-enable interrupts
+
+
+
         /* Blink LED L when outside [D1_CM, D2_CM] */
+
         if (cm < D1_CM || cm > D2_CM) {
-            if ((g_ms - last_toggle) >= 500) {
-                last_toggle = g_ms;
+
+            if ((current_ms - last_toggle) >= 500) { // use the safe copy
+
+                last_toggle = current_ms;
+
                 led_state ^= 1;
+
                 if (led_state) LED_L_ON();
+
                 else           LED_L_OFF();
+
             }
+
         } else {
+
             led_state = 0;
+
             LED_L_OFF();
+
         }
 
-        uart_puts("ADC=");
-        uart_put_u16(adc);
 
-        uart_puts(" V=");
-        uart_put_float_2(v);
-
-        uart_puts(" cm=");
-        uart_put_float_2(cm);
-
-        uart_puts(" duty=");
-        uart_put_u16(duty);
-
+        uart_puts("ADC="); uart_put_u16(adc);
+        uart_puts(" V="); uart_put_float_2(v);
+        uart_puts(" cm="); uart_put_float_2(cm); 
+        uart_puts(" duty="); uart_put_u16(duty);
         uart_puts("\r\n");
-
         _delay_ms(100);
+
     }
+    
 }
