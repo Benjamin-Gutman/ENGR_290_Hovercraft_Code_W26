@@ -1,0 +1,265 @@
+#define F_CPU 16000000UL
+
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include <util/delay.h>
+#include <stdint.h>
+
+// ---------------- Project constants ----------------
+#define D1_CM 14
+#define D2_CM 42
+
+// ---------------- UART (9600, 8N1) ----------------
+#define BAUD 9600UL
+#define UBRR_VALUE (F_CPU/(BAUD*16UL)-1)
+
+static void uart_init(void) {
+    UBRR0H = (uint8_t)(UBRR_VALUE >> 8);
+    UBRR0L = (uint8_t)(UBRR_VALUE);
+    UCSR0A = 0;
+    UCSR0B = (1 << TXEN0);
+    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
+}
+
+static void uart_tx(uint8_t data) {
+    while (!(UCSR0A & (1 << UDRE0))) { }
+    UDR0 = data;
+}
+
+static void uart_print_str(const char *s) {
+    while (*s) uart_tx((uint8_t)*s++);
+}
+
+static void uart_print_uint16(uint16_t v) {
+    char buf[6];
+    int i = 0;
+
+    if (v == 0) { uart_tx('0'); return; }
+
+    while (v > 0 && i < 5) {
+        buf[i++] = (char)('0' + (v % 10));
+        v /= 10;
+    }
+    while (i--) uart_tx((uint8_t)buf[i]);
+}
+
+static void uart_newline(void) {
+    uart_tx('\r');
+    uart_tx('\n');
+}
+
+// ---------------- 1ms timer (Timer0 CTC) ----------------
+// 16MHz / 64 = 250kHz. OCR0A=249 => 1kHz => 1ms interrupt
+volatile uint32_t g_ms = 0;
+
+ISR(TIMER0_COMPA_vect) { g_ms++; }
+
+static void timer0_init_1ms(void) {
+    TCCR0A = (1 << WGM01);
+    TCCR0B = (1 << CS01) | (1 << CS00);
+    OCR0A  = 249;
+    TIMSK0 = (1 << OCIE0A);
+}
+
+static uint32_t millis_now(void) {
+    uint32_t t;
+    cli();
+    t = g_ms;
+    sei();
+    return t;
+}
+
+// -------------- Pin Assignments --------------
+// LED D3 (PWM): PD3 (OC2B) - Timer2 Channel B
+// TRIG:        PD4 - Digital output for ultrasonic trigger
+// ECHO:        PD2 (INT0) - Digital input for ultrasonic echo
+// LED L:       PB5 (Pin 13) - Yellow LED flashing
+
+#define D3_PWM_DDR   DDRD
+#define D3_PWM_PORT  PORTD
+#define D3_PWM_BIT   PD3
+
+#define TRIG_DDR   DDRD
+#define TRIG_PORT  PORTD
+#define TRIG_BIT   PD4
+
+#define ECHO_DDR   DDRD
+#define ECHO_PORT  PORTD
+#define ECHO_PINR  PIND
+#define ECHO_BIT   PD2
+
+#define LEDL_DDR     DDRB
+#define LEDL_PORT    PORTB
+#define LEDL_BIT     PB5
+
+// ---------------- Timer1: prescaler 8 ----------------
+// 16 MHz / 8 = 2 MHz => 0.5 us per tick
+static void timer1_init(void) {
+    TCCR1A = 0;
+    TCCR1B = 0;
+    TCNT1  = 0;
+    TCCR1B = (1 << CS11);
+}
+
+// ---------------- PWM for D3 on PB3 (Timer2 OC2B) ----------------
+// Fast PWM, non-inverting on OC2B. Prescaler 64.
+static void pwm_d3_init(void) {
+    D3_PWM_DDR |= (1 << D3_PWM_BIT);
+    
+    TCCR2A = (1 << COM2B1) | (1 << WGM21) | (1 << WGM20); // Fast PWM, OC2B enabled
+    TCCR2B = (1 << CS22);  // Prescaler 64
+    OCR2B  = 255;            // start at 0% brightness (active-low assumption)
+}
+
+// If D3 is active-low on your controller, invert PWM:
+// OCR2A = 255 - duty. If it looks reversed in your lab, change to OCR2A = duty.
+static void d3_set_brightness(uint8_t duty_0_255) {
+    OCR2B = duty_0_255;
+}
+
+// ---------------- Blink LED "L" (PB5) ----------------
+static void ledL_init(void) {
+    LEDL_DDR |= (1 << LEDL_BIT);
+    LEDL_PORT &= ~(1 << LEDL_BIT);
+}
+
+static void ledL_set(uint8_t on) {
+    if (on) LEDL_PORT |= (1 << LEDL_BIT);
+    else    LEDL_PORT &= ~(1 << LEDL_BIT);
+}
+
+// ---------------- Distance to duty mapping ----------------
+static uint8_t duty_from_distance_cm(uint16_t dcm) {
+    // Distance of 0 means invalid reading - LED off
+    if (dcm == 0) return 0;
+    
+    // Below or at d1 (14cm) - LED off
+    if (dcm <= D1_CM) return 0;
+    
+    // At or above d2 (42cm) - LED full brightness
+    if (dcm >= D2_CM) return 255;
+
+    // Between d1 and d2 - linear interpolation
+    uint32_t num = (uint32_t)(dcm - D1_CM) * 255UL;
+    uint32_t diff = (uint32_t)(D2_CM - D1_CM);
+    return (uint8_t)(num / diff);
+}
+
+// ---------------- HC-SR04 measurement ----------------
+// Returns Timer1 ticks while Echo is HIGH. Returns 0 on timeout.
+static uint16_t measure_echo_ticks(void) {
+    // We are using P6: TRIG is PB3, same as PWM output.
+    // Disable PWM output briefly and send the 10us trigger.
+    //pwm_d3_disconnect();
+
+    // Trigger pulse: LOW 2us, HIGH 10us, LOW
+    TRIG_PORT &= ~(1 << TRIG_BIT);
+    _delay_us(2);
+    TRIG_PORT |= (1 << TRIG_BIT);
+    _delay_us(10);
+    TRIG_PORT &= ~(1 << TRIG_BIT);
+
+    // Wait for Echo HIGH with timeout 30ms
+    uint32_t start = millis_now();
+    while (!(ECHO_PINR & (1 << ECHO_BIT))) {
+        if ((millis_now() - start) > 30) return 0;
+    }
+
+    // Start timing
+    TCNT1 = 0;
+
+    // Wait for Echo LOW with timeout 30ms
+    start = millis_now();
+    while (ECHO_PINR & (1 << ECHO_BIT)) {
+        if ((millis_now() - start) > 30) return 0;
+    }
+
+    uint16_t ticks = TCNT1;
+    
+    return ticks;
+}
+
+int main(void) {
+    uart_init();
+    timer0_init_1ms();
+    timer1_init();
+    pwm_d3_init();
+    ledL_init();
+
+    // Trig output
+    TRIG_DDR  |= (1 << TRIG_BIT);   
+    TRIG_PORT &= ~(1 << TRIG_BIT);  
+
+    // Echo input, no pull-up
+    ECHO_DDR  &= ~(1 << ECHO_BIT);  
+    ECHO_PORT &= ~(1 << ECHO_BIT);  
+
+    sei(); 
+
+    uint32_t last_print = 0;
+    uint32_t last_blink_toggle = 0;
+    uint8_t blink_state = 0;
+
+    while (1) {
+        uint16_t ticks = measure_echo_ticks();
+
+        // Convert ticks to distance:
+        // ticks are 0.5 us each. duration_us = ticks/2.
+        // distance_cm = duration_us / 58 => distance_cm = ticks / 116
+        uint16_t distance_cm = 0;
+        if (ticks != 0) {
+            distance_cm = (uint16_t)(ticks / 116);
+        }
+
+        // Compute PWM duty for D3
+        uint8_t duty = duty_from_distance_cm(distance_cm);
+        d3_set_brightness(duty);
+
+        // Determine out-of-range
+        uint8_t out_of_range;
+        if (ticks == 0) {
+            out_of_range = 1;  // no echo treated as out of range
+        } else {
+            out_of_range = (distance_cm < D1_CM) || (distance_cm > D2_CM);
+        }
+
+        // Blink LED L with 1 second period when out of range (toggle every 500ms)
+        uint32_t now = millis_now();
+        if (!out_of_range) {
+            ledL_set(0);
+            blink_state = 0;
+            last_blink_toggle = now;
+        } else {
+            if ((now - last_blink_toggle) >= 500) {
+                last_blink_toggle = now;
+                blink_state ^= 1;
+                ledL_set(blink_state);
+            }
+        }
+
+         // UART print at 10 Hz
+        if ((now - last_print) >= 100) {
+            last_print = now;
+
+            if (ticks == 0) {
+                uart_print_str("No echo ");
+            } else {
+                uart_print_str("dist_cm=");
+                uart_print_uint16(distance_cm);
+                uart_print_str(" ");
+            }
+
+            uart_print_str("ticks=");
+            uart_print_uint16(ticks);
+
+            uart_print_str(" ADC=");
+            uart_print_uint16(0);
+
+            uart_print_str(" duty=");
+            uart_print_uint16(duty);
+            uart_newline();
+        }
+
+        _delay_ms(10);  // Small delay for stability
+    }
+}
