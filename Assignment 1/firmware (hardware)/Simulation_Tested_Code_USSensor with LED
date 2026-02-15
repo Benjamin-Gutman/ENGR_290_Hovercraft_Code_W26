@@ -109,7 +109,7 @@ void LEDFunction(uint16_t distance)
     else
         OCR2B = (uint8_t)(((distance - D1_CM) * 255) / (D2_CM - D1_CM));
 
-    // Blink L (LED on the board) when outside D1 or D2, otherwise keep it is off
+    // Blink L (LED on the board) when outside D1 or D2, otherwise it is off
     if (distance < D1_CM || distance > D2_CM)
     {
         blink ^= 1;
