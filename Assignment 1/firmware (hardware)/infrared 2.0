@@ -1,5 +1,5 @@
-#define F_CPU 16000000UL
-
+#define F_CPU 16000000UL //tells the compiler the MCU clock is 16 MHz, so _delay_ms() and the UART baud math are correct.
+//Include
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
