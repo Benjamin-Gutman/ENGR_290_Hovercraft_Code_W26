@@ -205,56 +205,65 @@ static uint8_t duty_from_cm(float cm) {
 
 
 int main(void) {
-       // LED L output/
-    DDRB |= (1 << LED_L_BIT);
-    LED_L_OFF();
+    //Configure the built-in LED "L" (PB5) as an output
+    //LED is active-low. That means writing 0 turns it ON, writing 1 turns it OFF
+    DDRB |= (1 << LED_L_BIT);    //Set PB5 as output
+    LED_L_OFF();    //Start with LED off (HIGH = off for active-low)
 
-    //Ensure PC3 is input and no pull-up /
-    DDRC  &= ~(1 << PC3);
-    PORTC &= ~(1 << PC3);
+    //Configure IR sensor input pin (PC3 = ADC3)
+    DDRC  &= ~(1 << PC3);    //Set PC3 as input
+    PORTC &= ~(1 << PC3);    //Disable internal pull-up resistor
 
-    cli();
-    timer0_init_1ms();
-    adc_init_aref(IR_ADC_CHANNEL);
-    pwm_d3_init();
-    uart_init();
+    //Disable interrupts while configuring peripherals
+    cli();    //Clear Interrupts (prevents interruptions during setup)
 
-    // Dummy conversion */
+    //Initialize all hardware modules
+    timer0_init_1ms();    //Sets up Timer0 to increment g_ms every 1ms (for LED blinking)
+    adc_init_aref(IR_ADC_CHANNEL);    //Configures ADC to use external AREF
+    pwm_d3_init();    //Sets up Timer2 for PWM control of D3 brightness
+    uart_init();    //Configures UART serial communication at 9600 baud
+
+    //Perform a dummy ADC conversion to stabilize the ADC hardware
+    //The (void) cast tells the compiler we're intentionally ignoring the return value
     (void)adc_read_blocking();
 
-    sei();
+    //Re-enable interrupts
+    sei();    //Set Interrupts (Timer0 will now start counting)
 
-    // FORCE D3 TO 50% BRIGHTNESS FOR TESTING
-    pwm_d3_set(128);  // <--- New line to be added here
-
+    //Print startup message to serial monitor
     uart_puts("IR mode (ADC3/PC3): ADC, V, cm(extrap), duty\r\n");
 
-    uint32_t last_toggle = 0;
-    uint8_t led_state = 0;
+    //Variables for LED blinking
+    uint32_t last_toggle = 0;    //Stores the last time (in ms) the LED changed state
+    uint8_t led_state = 0;    //Current state of LED: 0 = OFF, 1 = ON
 
+    //Infinite loop
     while (1) {
 
-        uint16_t adc = readIR_Average(60);
+        //Take 60 ADC readings and average them to reduce noise
+        //More samples = more stable readings, but slower loop speed
+        uint16_t adc = readIR_Average(60);    //Returns 10-bit value (0-1023)
 
-
-
+        //Convert ADC reading to voltage using reference voltage
+        //Formula: Voltage = (ADC_value / AREF_V) * 1023
         float v  = ((float)adc * AREF_V) / 1023.0f;
 
+        //Convert ADC reading to distance in cm using lookup table + interpolation
+        //Works for entire range: extrapolates below 7cm and above 80cm
         float cm = cm_from_adc_piecewise_extrap(adc);
 
-
-
+        //Calculate required duty cycle based on distance:
+        //≤14cm → 0% (off), ≥42cm → 100% (full brightness), linear in between
         uint8_t duty = duty_from_cm(cm);
 
-        pwm_d3_set(duty);
+        pwm_d3_set(duty); //Apply to hardware
 
 
-
-        cli();                  // Disable interrupts
-
-        uint32_t current_ms = g_ms; // Copy the value safely
-
-        sei();                  // Re-enable interrupts
+        //g_ms is updated by interrupt, reading it safely requires disabling interrupts
+        //This prevents reading a corrupted value if interrupt occurs during multi-byte read
+        cli();                  //Disable interrupts
+        uint32_t current_ms = g_ms; //Copy the value safely
+        sei();                  //Re-enable interrupts
 
 
 
@@ -262,33 +271,35 @@ int main(void) {
 
         if (cm < D1_CM || cm > D2_CM) {
 
-            if ((current_ms - last_toggle) >= 500) { // use the safe copy
+            //Check if 500ms (0.5 seconds) have passed since last toggle
+            if ((current_ms - last_toggle) >= 500) {    //use the safe copy
 
-                last_toggle = current_ms;
+                last_toggle = current_ms;    //Update the time tracker
+                led_state ^= 1;    //Toggle: 0 to 1 or 1 to 0 (XOR operation)
 
-                led_state ^= 1;
+                //Apply new state to physical LED
+                if (led_state) LED_L_ON();    //Turn ON (active-low: 0 = on)
 
-                if (led_state) LED_L_ON();
-
-                else           LED_L_OFF();
+                else           LED_L_OFF();    //Turn OFF (active-low: 1 = off)
 
             }
 
         } else {
-
-            led_state = 0;
-
-            LED_L_OFF();
+            //Obstacle is inside safe range (ensure LED is OFF)
+            led_state = 0;    //Reset state tracker
+            LED_L_OFF();    //Turn off LED
 
         }
 
-
+        //Output data via UART
         uart_puts("ADC="); uart_put_u16(adc);
         uart_puts(" V="); uart_put_float_2(v);
         uart_puts(" cm="); uart_put_float_2(cm); 
         uart_puts(" duty="); uart_put_u16(duty);
         uart_puts("\r\n");
-        _delay_ms(100);
+
+        //Prevents flooding the serial monitor and gives time to read values
+        _delay_ms(100);    //Short delay
 
     }
     
