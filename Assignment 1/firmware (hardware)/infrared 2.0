@@ -23,114 +23,143 @@
 #define PWM_D3_DDR    DDRB
 #define PWM_D3_BIT    PB3
 
-//
-#define LED_L_ON()    (PORTB &= ~(1 << LED_L_BIT))
-#define LED_L_OFF()   (PORTB |=  (1 << LED_L_BIT))
 
-/* ---------- 1 ms time base for blinking ---------- */
-static volatile uint32_t g_ms = 0;
+#define LED_L_ON()    (PORTB &= ~(1 << LED_L_BIT)) // Turn ON the “L” LED (active-LOW): clear PB5 = write 0
+#define LED_L_OFF()   (PORTB |=  (1 << LED_L_BIT)) // Turn OFF the “L” LED (active-LOW): set   PB5 = write 1
 
-ISR(TIMER0_COMPA_vect) { g_ms++; }
+// 1 ms time base for blinking
+static volatile uint32_t g_ms = 0; // Millisecond counter (it changes inside an interrupt, so it must be volatile)
+
+ISR(TIMER0_COMPA_vect) { g_ms++; } // Timer0 Compare Match A interrupt: runs every 1 ms and increments g_ms.
 
 static void timer0_init_1ms(void) {
-    TCCR0A = (1 << WGM01);
-    OCR0A  = 249;
-    TCCR0B = (1 << CS01) | (1 << CS00);
-    TIMSK0 = (1 << OCIE0A);
+    TCCR0A = (1 << WGM01); // Timer0 CTC mode ("Clear Timer on Compare"): counter resets when it reaches OCR0A.
+    OCR0A  = 249; // Compare value: timer counts 0..249 (250 ticks) before reset/interrupt.
+      // Prescaler = 64: Timer0 clock = 16 MHz / 64 = 250 kHz, so 250 ticks = 1 ms.
+    TCCR0B = (1 << CS01) | (1 << CS00);// Prescaler = 64 (slows down the timer clock)
+    TIMSK0 = (1 << OCIE0A); // Enable interrupt when Timer0 matches OCR0A (so ISR fires every 1 ms).
 }
 
-/* ---------- UART 9600 (TX only) ---------- */
-#define BAUD     9600UL
-#define UBRR_VAL ((F_CPU / (16UL * BAUD)) - 1UL)
+// UART 9600 TX only: used to send text/data from the board to the PC (serial terminal) at 9600 bits/s
+#define BAUD     9600UL  // UART (UART = serial communication to the PC) baud rate (bits per second)
+#define UBRR_VAL ((F_CPU / (16UL * BAUD)) - 1UL) // Value loaded into UBRR to get ~9600 baud (UART uses F_CPU/16 in normal mode)
 
 static void uart_init(void) {
-    UBRR0H = (uint8_t)(UBRR_VAL >> 8);
-    UBRR0L = (uint8_t)(UBRR_VAL & 0xFF);
-    UCSR0B = (1 << TXEN0);
-    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00); /* 8N1 */
+    // Set the UART baud rate by loading UBRR0 (UART Baud Rate Register).
+    // UBRR_VAL is a 16-bit number, so we split it into High byte (UBRR0H) and Low byte (UBRR0L).
+    UBRR0H = (uint8_t)(UBRR_VAL >> 8);// Upper 8 bits of the baud-rate setting
+    UBRR0L = (uint8_t)(UBRR_VAL & 0xFF);// Lower 8 bits of the baud-rate setting
+    // Enable only the UART Transmitter (TX). (We are not using RX in this project.)
+    UCSR0B = (1 << TXEN0);  //TXEN0="Transmit Enable" bit
+     // Configure the UART frame format.
+    // UCSZ01 and UCSZ00 set "character size" = 8 data bits.
+    // This is called "8N1": 8 data bits, No parity bit, 1 stop bit (default is 1 stop bit).
+    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
 }
 
 static void uart_putc(char c) {
+    // Wait until the UART transmit buffer is ready for a new byte.
+    // UDRE0 = "USART Data Register Empty" bit (1 means UDR0 can accept new data).
     while (!(UCSR0A & (1 << UDRE0))) {}
+    // Send one character by writing it to UDR0 (USART Data Register).
+    // Hardware then shifts it out on the TX pin.
     UDR0 = c;
 }
-static void uart_puts(const char *s) { while (*s) uart_putc(*s++); }
+static void uart_puts(const char *s) { while (*s) uart_putc(*s++); } // Send a C string (ends with '\0') by sending characters one-by-one.
 
 static void uart_put_u16(uint16_t x) {
-    char buf[6];
-    itoa(x, buf, 10);
+    // Convert an unsigned 16-bit integer to text (base 10) and send it.
+    char buf[6]; // Max "65535" plus '\0' needs 6 chars
+    itoa(x, buf, 10); // itoa converts integer -> ASCII string
     uart_puts(buf);
 }
 static void uart_put_i16(int16_t x) {
-    char buf[8];
+     // Convert a signed 16-bit integer to text (base 10) and send it.
+    char buf[8];  // Enough for "-32768" plus '\0'
     itoa(x, buf, 10);
     uart_puts(buf);
 }
 
-/* Print float with 2 decimals without printf */
+// Print a float with 2 decimals without using printf (saves a lot of memory on AVR)
 static void uart_put_float_2(float v) {
+    // Convert float to "fixed-point" integer: value * 100 (ex: 12.34 -> 1234)
+    // +0.5/-0.5 is for rounding to nearest instead of truncating
     int16_t x = (int16_t)(v * 100.0f + (v >= 0 ? 0.5f : -0.5f));
-    int16_t ip = x / 100;
-    int16_t fp = x % 100;
-    if (fp < 0) fp = -fp;
+    int16_t ip = x / 100; // Integer part (12.34 -> 12)
+    int16_t fp = x % 100; // Fractional part (12.34 -> 34)
+    if (fp < 0) fp = -fp; // Make sure decimals print positive even for negative numbers
 
-    uart_put_i16(ip);
-    uart_putc('.');
-    if (fp < 10) uart_putc('0');
-    uart_put_u16((uint16_t)fp);
+    uart_put_i16(ip); // Send integer part
+    uart_putc('.'); // Send decimal point
+    if (fp < 10) uart_putc('0'); // Leading zero for values like 12.05
+    uart_put_u16((uint16_t)fp); // Send 2-digit decimal part
 }
 
-/* ---------- ADC (external AREF, no analogRead) ---------- */
+// ADC setup (we read the IR sensor voltage using the ADC hardware, not analogRead)
 static void adc_init_aref(uint8_t channel) {
-    /* REFS1:0 = 00 -> External AREF pin (RV1)
-       ADLAR = 0 -> right-adjust
-       MUX = channel */
+    // ADMUX selects:
+    // - ADC reference source (REFS bits)
+    // - ADC input channel (MUX bits)
+    // Here we set REFS0=1 and put the channel in the MUX bits (0..7)
     ADMUX = (1 << REFS0) | (channel & 0x07);
-
-    /* Disable digital input buffer on ADC pin (reduces noise) */
+    // DIDR0 disables the digital input buffer on that ADC pin
+    // This reduces noise and saves power when using the pin as analog input
     if (channel <= 5) {
-        DIDR0 |= (1 << channel); /* channel 3 -> ADC3D bit */
+        DIDR0 |= (1 << channel); // channel 3 -> disables digital input on ADC3 pin
     }
 
-    /* Enable ADC, prescaler 128 -> 16MHz/128 = 125kHz */
+    // ADCSRA controls the ADC:
+    // - ADEN = enable the ADC hardware
+    // - ADPS2:0 = prescaler (slows ADC clock down so conversions are accurate)
+    // Prescaler 128: ADC clock = 16 MHz / 128 = 125 kHz (good range for AVR ADC)
     ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);
 
-    /* No auto-trigger */
+    // ADCSRB = 0 means no auto-trigger (we start each conversion manually)
     ADCSRB = 0;
 }
-
+// Start one ADC conversion and wait until it finishes (blocking read)
 static uint16_t adc_read_blocking(void) {
-    ADCSRA |= (1 << ADSC);
-    while (ADCSRA & (1 << ADSC)) {}
-    return ADC;
+    ADCSRA |= (1 << ADSC); // ADSC = start conversion
+    while (ADCSRA & (1 << ADSC)) {} // Wait while ADSC stays 1 (ADC is busy)
+    return ADC; // Read 10-bit result (0..1023)
 }
-
+// Read the IR sensor many times and average it (reduces noise, but slower)
 static uint16_t readIR_Average(uint8_t n) {
-    uint32_t sum = 0;
+    uint32_t sum = 0; // 32-bit so it won't overflow when adding many samples
     for (uint8_t i = 0; i < n; i++) {
-        sum += adc_read_blocking();
-        _delay_ms(2);
+        sum += adc_read_blocking();// One 10-bit ADC reading
+        _delay_ms(2);// Small delay between samples (lets signal settle, lowers noise)
     }
-    return (uint16_t)(sum / n);
+    return (uint16_t)(sum / n);// Average ADC value (still 0..1023)
 }
 
-/* ---------- PWM on D3 (PB3 = OC2A) ---------- */
+// PWM output on D3 (PB3 = OC2A)
+// OC2A = "Output Compare 2A": Timer2 can drive this pin automatically to generate PWM.
 static void pwm_d3_init(void) {
-    PWM_D3_DDR |= (1 << PWM_D3_BIT);
+    PWM_D3_DDR |= (1 << PWM_D3_BIT);  // Set PB3 as OUTPUT (this is the PWM pin for D3)
 
-    /* Fast PWM 8-bit, OC2A inverting (active-low LED hardware) */
+    // Timer2 Fast PWM, 8-bit:
+    // - WGM21 + WGM20: Fast PWM mode with TOP = 0xFF (counts 0..255)
+    // - COM2A1 + COM2A0: "inverting" PWM on OC2A (useful if the LED hardware is active-low)
+    //   Inverting means: OCR2A = 0  -> output mostly HIGH, OCR2A = 255 -> output mostly LOW.
+    // - If the LED is active-low, "more LOW time" = "brighter".
     TCCR2A = (1 << WGM21) | (1 << WGM20) | (1 << COM2A1) | (1 << COM2A0);
-    TCCR2B = (1 << CS22); /* prescaler 64 */
-    OCR2A  = 0;
+    // Prescaler = 64 for Timer2 (slows down the timer clock so PWM frequency is reasonable)
+    // CS22=1 sets prescaler 64 (for Timer2).
+    TCCR2B = (1 << CS22); 
+    OCR2A  = 0; // Start with 0% brightness (for active-low LED, this should be OFF)
 }
+// Update PWM duty cycle (0..255). This changes how bright D3 is.
 static void pwm_d3_set(uint8_t duty) { OCR2A = duty; }
 
-/* ---------- Calibration table (distance -> ADC) ---------- */
+// Calibration table: distance in cm -> typical ADC reading you measured
+// We use this table to convert an ADC value back into a distance by linear interpolation.
 typedef struct {
-    uint16_t d_cm;
-    uint16_t adc;
+    uint16_t d_cm; // distance in centimeters
+    uint16_t adc; // ADC reading (0..1023) measured at that distance
 } CalPoint;
-
+// Points must be in increasing distance order.
+// In your sensor data, adc usually gets smaller as distance gets larger.
 static const CalPoint cal[] = {
     {  7, 675 },
     {  8, 625 },
@@ -144,60 +173,73 @@ static const CalPoint cal[] = {
     { 80,  96 }
 };
 
-#define CAL_N (sizeof(cal)/sizeof(cal[0]))
+#define CAL_N (sizeof(cal)/sizeof(cal[0])) // Number of points in the calibration table
 
-/* ADC -> cm piecewise, con EXTRAPOLACION usando la primera y la ultima recta */
+// Convert ADC -> cm using piecewise linear interpolation.
+// "Extrapolation" means: if adc is outside the table range, we keep using the first or last line segment.
 static float cm_from_adc_piecewise_extrap(uint16_t adc) {
     uint8_t i;
 
-    /* Extrapola por arriba (mas cerca que 7 cm) con el primer segmento */
+    // If adc is larger than the first point, the object is closer than our smallest distance (7 cm).
+    // Use the first segment (7 cm to 8 cm) to extrapolate "above" the table.
     if (adc >= cal[0].adc) {
         i = 0; /* 7-8 cm */
     }
-    /* Extrapola por abajo (mas lejos que 80 cm) con el ultimo segmento */
+    // If adc is smaller than the last point, the object is farther than our largest distance (80 cm).
+    // Use the last segment (50 cm to 80 cm) to extrapolate "below" the table.
     else if (adc <= cal[CAL_N - 1].adc) {
         i = (uint8_t)(CAL_N - 2); /* 50-80 cm */
     }
-    /* Dentro de rango: busca el segmento */
+     // Otherwise, adc is inside the table range: find which segment contains this adc.
     else {
         for (i = 0; i < (CAL_N - 1); i++) {
             float a0 = (float)cal[i].adc;
             float a1 = (float)cal[i + 1].adc;
 
-            /* Normalmente a0 > a1 (ADC baja cuando cm sube) */
+            // Normal case: a0 > a1 (adc decreases as distance increases)
+            // We check if adc is between a0 and a1.
             if (a0 >= a1) {
                 if ((float)adc <= a0 && (float)adc >= a1) break;
             } else {
-                if ((float)adc >= a0 && (float)adc <= a1) break;
+                if ((float)adc >= a0 && (float)adc <= a1) break;  // Safety fallback if any segment is increasing (rare in your data)
             }
         }
+        // If something went wrong, fall back to the last segment.
         if (i >= (CAL_N - 1)) i = (uint8_t)(CAL_N - 2);
     }
-
+   // Endpoints of the chosen segment (d0,a0) to (d1,a1)
     float d0 = (float)cal[i].d_cm;
     float d1 = (float)cal[i + 1].d_cm;
     float a0 = (float)cal[i].adc;
     float a1 = (float)cal[i + 1].adc;
 
-    /* Evita division por 0 si dos puntos tuvieran el mismo ADC */
+    // Avoid division by zero if two points had the same ADC.
     float den = (a1 - a0);
     if (den == 0.0f) return d0;
 
-    /* t puede ser <0 o >1 cuando extrapola (y esta bien) */
+    // Linear interpolation factor:
+    // t = 0 means "at point 0", t = 1 means "at point 1".
+    // In extrapolation, t can be <0 or >1 and that is OK.
     float t = ((float)adc - a0) / den;
+    // Convert that t into distance in cm along the segment.
     return d0 + t * (d1 - d0);
 }
 
-/* Brightness vs distance requirement:
-   d1 or less -> 0%
-   d2 or more -> 100%
-   linear between */
+// Convert distance (cm) into PWM duty (0..255) based on the assignment rule:
+// - at d1 or closer: 0% brightness
+// - at d2 or farther: 100% brightness
+// - linear in-between
 static uint8_t duty_from_cm(float cm) {
-    if (cm <= D1_CM) return 0;
-    if (cm >= D2_CM) return 255;
+    if (cm <= D1_CM) return 0; // Closer than d1 -> LED OFF (0% brightness)
+    if (cm >= D2_CM) return 255; // Farther than d2 -> LED FULL (100% brightness)
 
+// Linear map: cm from D1..D2 becomes t from 0..1
     float t = (cm - D1_CM) / (D2_CM - D1_CM);
+    
+    // Convert 0..1 into 0..255, +0.5 for rounding to nearest integer
     int32_t duty = (int32_t)(t * 255.0f + 0.5f);
+    
+    // Safety clamp (should already be in range, but keeps it robust)
     if (duty < 0) duty = 0;
     if (duty > 255) duty = 255;
     return (uint8_t)duty;
