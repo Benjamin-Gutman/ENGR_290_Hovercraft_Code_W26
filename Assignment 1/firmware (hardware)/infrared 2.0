@@ -1,29 +1,29 @@
 #define F_CPU 16000000UL //tells the compiler the MCU clock is 16 MHz, so _delay_ms() and the UART baud math are correct.
-//Include
+//Include lines import AVR register names (io.h), interrupt support (interrupt.h), delay functions (delay.h), fixed-size integer types (stdint.h), and itoa() (stdlib.h).
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
 #include <stdint.h>
 #include <stdlib.h>
 
-/* ---------- User calibration ---------- */
+//D1_CM and D2_CM are the two "limit distances" proposed for the assignment logic
 #define D1_CM      14.0f
 #define D2_CM      42.0f
 
-/* Your measured ADC reference voltage from RV1 (AREF pin) */
+// ADC reference voltage (Vref)->We measured it on the board between the AREF pin and GND while powered.
 #define AREF_V     4.64f
 
-/* IR on PC3 = ADC3 (P16 pin 1 on ENGR290 board) */
+//IR_ADC_CHANNEL selects which ADC input we read-> It is wired to PC3, which is ADC3 on the ATmega328P ((ENGR290 connector P16 pin 1).
 #define IR_ADC_CHANNEL  3
 
-/* ENGR290 board pins:
-   LED "L" is PB5 and is ACTIVE LOW.
-   D3 brightness is PB3 = OC2A (Timer2 channel A). */
+//Board pin mapping used in this project:
+// - LED "L" is on PB5 and is ACTIVE LOW (writting 0 turns it ON, writing 1 turns it OFF)
+// - D3 brightness uses PWM (255) on PB3 = OC2A (Timer2 outpute compare A)
 #define LED_L_BIT     PB5
 #define PWM_D3_DDR    DDRB
 #define PWM_D3_BIT    PB3
 
-/* LED L ACTIVE LOW helpers */
+//
 #define LED_L_ON()    (PORTB &= ~(1 << LED_L_BIT))
 #define LED_L_OFF()   (PORTB |=  (1 << LED_L_BIT))
 
