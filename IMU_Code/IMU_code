@@ -1,0 +1,143 @@
+#define F_CPU 16000000UL
+#include <avr/io.h>
+#include <util/delay.h>
+#include <stdint.h>
+
+//MPU6050 registers
+#define MPU6050_ADDR        0x68
+#define MPU6050_WHO_AM_I    0x75
+#define MPU6050_PWR_MGMT_1  0x6B
+#define MPU6050_ACCEL_XOUT_H 0x3B
+#define MPU6050_ACCEL_XOUT_L 0x3C
+#define MPU6050_ACCEL_YOUT_H 0x3D
+#define MPU6050_ACCEL_YOUT_L 0x3E
+#define MPU6050_ACCEL_ZOUT_H 0x3F
+#define MPU6050_ACCEL_ZOUT_L 0x40
+#define MPU6050_TEMP_OUT_H   0x41
+#define MPU6050_TEMP_OUT_L   0x42
+#define MPU6050_GYRO_XOUT_H  0x43
+#define MPU6050_GYRO_XOUT_L  0x44
+#define MPU6050_GYRO_YOUT_H  0x45
+#define MPU6050_GYRO_YOUT_L  0x46
+#define MPU6050_GYRO_ZOUT_H  0x47
+#define MPU6050_GYRO_ZOUT_L  0x48
+#define MPU6050_ACCEL_CONFIG 0x1C
+#define MPU6050_GYRO_CONFIG  0x1B
+
+typedef struct {
+    int16_t accel_x;
+    int16_t accel_y;
+    int16_t accel_z;
+    int16_t temp;
+    int16_t gyro_x;
+    int16_t gyro_y;
+    int16_t gyro_z;
+} mpu6050_data_t;
+
+//Accelerometer full-scale ranges
+typedef enum {
+    AFS_2G  = 0,  // ±2g
+    AFS_4G  = 1,  // ±4g  
+    AFS_8G  = 2,  // ±8g
+    AFS_16G = 3   // ±16g
+} accel_range_t;
+
+//Gyroscope full-scale ranges
+typedef enum {
+    GFS_250DPS  = 0,  // ±250 °/sec
+    GFS_500DPS  = 1,  // ±500 °/sec
+    GFS_1000DPS = 2,  // ±1000 °/sec
+    GFS_2000DPS = 3   // ±2000 °/sec
+} gyro_range_t;
+
+//sensitivity variables
+static float accel_sensitivity = 16384.0f;  //Default ±2g
+static float gyro_sensitivity = 131.0f;     //Default ±250°/sec
+
+//MPU6050 functions
+uint8_t mpu6050_init(void) {
+    // Check connection
+    if (mpu6050_who_am_i() != MPU6050_ADDR) {
+        return 0;  // Failed
+    }
+    
+    // Wake up device
+    I2C_start();
+    I2C_write((MPU6050_ADDR << 1) | 0);  // Write mode
+    I2C_write(MPU6050_PWR_MGMT_1);
+    I2C_write(0x00);  // Wake up
+    I2C_stop();
+    return 1;  // Success
+}
+
+uint8_t mpu6050_who_am_i(void) {
+    return I2C_read_reg(MPU6050_ADDR, MPU6050_WHO_AM_I);
+}
+
+void mpu6050_set_accel_range(accel_range_t range) {
+    I2C_start();
+    I2C_write((MPU6050_ADDR << 1) | 0); //write mode
+    I2C_write(MPU6050_ACCEL_CONFIG);
+    I2C_write(range << 3);  //Bits 4:3 in ACCEL_CONFIG
+    I2C_stop();
+    
+    //Update sensitivity factor
+    switch(range) {
+        case AFS_2G:  accel_sensitivity = 16384.0f; break;
+        case AFS_4G:  accel_sensitivity = 8192.0f;  break;
+        case AFS_8G:  accel_sensitivity = 4096.0f;  break;
+        case AFS_16G: accel_sensitivity = 2048.0f;  break;
+    }
+}
+
+void mpu6050_set_gyro_range(gyro_range_t range) {
+    I2C_start();
+    I2C_write((MPU6050_ADDR << 1) | 0);
+    I2C_write(MPU6050_GYRO_CONFIG);
+    I2C_write(range << 3);  //Bits 4:3 in GYRO_CONFIG
+    I2C_stop();
+    
+    //Update sensitivity factor
+    switch(range) {
+        case GFS_250DPS:  gyro_sensitivity = 131.0f;   break;
+        case GFS_500DPS:  gyro_sensitivity = 65.5f;    break;
+        case GFS_1000DPS: gyro_sensitivity = 32.8f;    break;
+        case GFS_2000DPS: gyro_sensitivity = 16.4f;    break;
+    }
+}
+
+void mpu6050_read_all(mpu6050_data_t *data) {
+    uint8_t high, low;
+
+    I2C_start();
+    
+    high = I2C_read_reg(MPU6050_ADDR, MPU6050_ACCEL_XOUT_H);
+    low = I2C_read_reg(MPU6050_ADDR, MPU6050_ACCEL_XOUT_L);
+    data->accel_x = (high << 8) | low;
+    
+    high = I2C_read_reg(MPU6050_ADDR, MPU6050_ACCEL_YOUT_H);
+    low = I2C_read_reg(MPU6050_ADDR, MPU6050_ACCEL_YOUT_L);
+    data->accel_y = (high << 8) | low;
+
+    high = I2C_read_reg(MPU6050_ADDR, MPU6050_ACCEL_ZOUT_H);
+    low = I2C_read_reg(MPU6050_ADDR, MPU6050_ACCEL_ZOUT_L);
+    data->accel_z = (high << 8) | low;
+    
+    high = I2C_read_reg(MPU6050_ADDR, MPU6050_TEMP_OUT_H);
+    low = I2C_read_reg(MPU6050_ADDR, MPU6050_TEMP_OUT_L);
+    data->temp = (high << 8) | low;
+
+    high = I2C_read_reg(MPU6050_ADDR, MPU6050_GYRO_XOUT_H);
+    low = I2C_read_reg(MPU6050_ADDR, MPU6050_GYRO_XOUT_L);
+    data->gyro_x = (high << 8) | low;
+
+    high = I2C_read_reg(MPU6050_ADDR, MPU6050_GYRO_YOUT_H);
+    low = I2C_read_reg(MPU6050_ADDR, MPU6050_GYRO_YOUT_L);
+    data->gyro_y = (high << 8) | low;
+
+    high = I2C_read_reg(MPU6050_ADDR, MPU6050_GYRO_ZOUT_H);
+    low = I2C_read_reg(MPU6050_ADDR, MPU6050_GYRO_ZOUT_L);
+    data->gyro_z = (high << 8) | low;
+
+    I2C_stop();
+}
