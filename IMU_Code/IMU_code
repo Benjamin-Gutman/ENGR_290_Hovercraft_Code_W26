@@ -4,8 +4,13 @@
 #include <util/delay.h> // Delay functions such as _delay_ms() and _delay_us()
 #include <stdint.h> // Fixed-width integer types like uint8_t, int16_t, uint32_t
 #include <math.h> // Math functions such as sqrt(), atan2(), and fabs()
-#include "TWI_290.h" // Course TWI/I2C driver header used to communicate with the MPU6050
-// TWI (Two-Wire Interface) is the AVR implementation of the I2C communication protocol
+#include "I2C_driver.h" //Header for the I2C functions
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+
+
 // I2C is a two-wire serial communication protocol used to exchange data between the AVR and external devices such as the MPU6050
 
 //MPU6050 registers-> Register addresses used to read data from and configure the MPU6050
@@ -45,7 +50,6 @@ typedef struct {
     int16_t gyro_z;    // Raw gyroscope reading along the Z axis
 } mpu6050_data_t;
 
-
 //Available full-scale range settings for the accelerometer
 typedef enum {
     AFS_2G  = 0,   // Accelerometer range set to ±2g
@@ -62,71 +66,65 @@ typedef enum {
     GFS_2000DPS = 3    // Gyroscope range set to ±2000 degrees per second
 } gyro_range_t;
 
+uint8_t mpu6050_init(void);
+uint8_t mpu6050_who_am_i(void);
+uint8_t mpu6050_set_accel_range(accel_range_t range);
+uint8_t mpu6050_set_gyro_range(gyro_range_t range);
+uint8_t mpu6050_set_dlpf(uint8_t dlpf_cfg);
+uint8_t mpu6050_set_sample_rate_div(uint8_t div);
+uint8_t mpu6050_read_all(mpu6050_data_t *data);
+
+float mpu6050_accel_to_g(int16_t raw);
+float mpu6050_gyro_to_dps(int16_t raw);
+float mpu6050_temp_to_c(int16_t raw_temp);
+
 
 // Conversion factors used to transform raw sensor readings into physical units
 static float accel_sensitivity = 16384.0f;  // Default accelerometer sensitivity for ±2g
 static float gyro_sensitivity  = 131.0f;    // Default gyroscope sensitivity for ±250 deg/s
 
 
-// Variables from the TWI driver used to store the last received byte and communication status
-extern volatile uint8_t TWI_byte;
-extern volatile uint8_t TWI_status;
 
 // MPU6050 basic configuration and data reading functions
 uint8_t mpu6050_init(void)
 {
-    uint8_t who;      // Stores the value read from the WHO_AM_I register
-    uint8_t status;   // Stores the return status of TWI operations
+    uint8_t who;
 
-    _delay_ms(100);   // Wait for the sensor to power up and stabilize
+    _delay_ms(100);
 
-    status = mpu6050_who_am_i(&who);   // Read the device identification register
-    if (status != 0) return 1;         // Return error if communication fails
+    who = mpu6050_who_am_i();
+    if (who != 0x68 && who != 0x69) return 1;
 
-    // Check that the detected device ID matches a valid MPU6050 address
-    if (who != 0x68 && who != 0x69) return 2;
+    I2C_write_reg(0x01, MPU6050_PWR_MGMT_1);
 
-    // Wake up the sensor and select PLL with X-axis gyroscope as clock source
-    status = Write_Reg(MPU6050_ADDR, MPU6050_PWR_MGMT_1, 0x01);
-    if (status != 0) return 3;         // Return error if register write fails
+    _delay_ms(100);
 
-    _delay_ms(100);   // Wait for the sensor to apply the new settings
-
-    return 0;         // Initialization successful
+    return 0;
 }
 
 
-uint8_t mpu6050_who_am_i(uint8_t *who)
+
+uint8_t mpu6050_who_am_i(void)
 {
-    // Read the WHO_AM_I register and store the communication status
-    uint8_t status = Read_Reg(MPU6050_ADDR, MPU6050_WHO_AM_I);
-
-    // Return immediately if the register read failed
-    if (status != 0) return status;
-
-    // Copy the received byte into the variable provided by the caller
-    *who = TWI_byte;
-
-    // Return 0 to indicate success
-    return 0;
+    return I2C_read_reg(MPU6050_WHO_AM_I);
 }
 
 
 
 uint8_t mpu6050_set_accel_range(accel_range_t range)
 {
-    // Update the conversion factor according to the selected range
     switch(range) {
-        case AFS_2G:  accel_sensitivity = 16384.0f; break;  // ±2g
-        case AFS_4G:  accel_sensitivity = 8192.0f;  break;  // ±4g
-        case AFS_8G:  accel_sensitivity = 4096.0f;  break;  // ±8g
-        case AFS_16G: accel_sensitivity = 2048.0f;  break;  // ±16g
-        default: return 1;  // Invalid range value
+        case AFS_2G:  accel_sensitivity = 16384.0f; break;
+        case AFS_4G:  accel_sensitivity = 8192.0f;  break;
+        case AFS_8G:  accel_sensitivity = 4096.0f;  break;
+        case AFS_16G: accel_sensitivity = 2048.0f;  break;
+        default: return 1;
     }
 
-    // Write the selected accelerometer range into the ACCEL_CONFIG register
-    return Write_Reg(MPU6050_ADDR, MPU6050_ACCEL_CONFIG, (range << 3));
+    I2C_write_reg((range << 3), MPU6050_ACCEL_CONFIG);
+    return 0;
 }
+
 
 uint8_t mpu6050_set_gyro_range(gyro_range_t range)
 {
@@ -138,71 +136,42 @@ uint8_t mpu6050_set_gyro_range(gyro_range_t range)
         default: return 1;
     }
 
-    // Write the selected gyroscope full-scale range into the GYRO_CONFIG register
-    return Write_Reg(MPU6050_ADDR, MPU6050_GYRO_CONFIG, (range << 3));
+    I2C_write_reg((range << 3), MPU6050_GYRO_CONFIG);
+    return 0;
 }
+
 
 
 uint8_t mpu6050_set_dlpf(uint8_t dlpf_cfg)
 {
-    // Set the digital low-pass filter configuration in the CONFIG register
-    // Only the lowest 3 bits are used
-    return Write_Reg(MPU6050_ADDR, MPU6050_CONFIG, (dlpf_cfg & 0x07));
+    I2C_write_reg((dlpf_cfg & 0x07), MPU6050_CONFIG);
+    return 0;
 }
 
 uint8_t mpu6050_set_sample_rate_div(uint8_t div)
 {
-    // Set the sample rate divider in the SMPLRT_DIV register
-    return Write_Reg(MPU6050_ADDR, MPU6050_SMPLRT_DIV, div);
+    I2C_write_reg(div, MPU6050_SMPLRT_DIV);
+    return 0;
 }
+
 
 uint8_t mpu6050_read_all(mpu6050_data_t *data)
 {
-    // Buffer used to store the 14 consecutive bytes read from the sensor
     uint8_t buf[14];
-    uint8_t i;
 
-    // Start TWI communication in write mode to select the first register to read from
-    TWI_status = TWI_start(MPU6050_ADDR, TW_WRITE);
-    if (TWI_status) return 1;   // Return error if the start condition fails
+    I2C_read_multiple_reg(MPU6050_ACCEL_XOUT_H, buf, 14);
 
-    // Send the address of the first output register
-    TWI_status = TWI_write(MPU6050_ACCEL_XOUT_H);
-    if (TWI_status) {
-        TWI_stop();   // Stop communication if sending the register address fails
-        return 2;
-    }
+    data->accel_x = (int16_t)((buf[0]  << 8) | buf[1]);
+    data->accel_y = (int16_t)((buf[2]  << 8) | buf[3]);
+    data->accel_z = (int16_t)((buf[4]  << 8) | buf[5]);
+    data->temp    = (int16_t)((buf[6]  << 8) | buf[7]);
+    data->gyro_x  = (int16_t)((buf[8]  << 8) | buf[9]);
+    data->gyro_y  = (int16_t)((buf[10] << 8) | buf[11]);
+    data->gyro_z  = (int16_t)((buf[12] << 8) | buf[13]);
 
-// Restart TWI communication in read mode to receive the sensor data
-TWI_status = TWI_start(MPU6050_ADDR, TW_READ);
-if (TWI_status) {
-    TWI_stop();   // Stop communication if the read start fails
-    return 3;
+    return 0;
 }
 
-// Read the first 13 bytes and send ACK after each byte
-for (i = 0; i < 13; i++) {
-    buf[i] = TWI_ack_read();
-}
-
-// Read the last byte with NACK to indicate the end of the burst read
-buf[13] = TWI_nack_read();
-
-// End the TWI communication
-TWI_stop();
-
-// Combine high and low bytes to reconstruct the 16-bit signed sensor readings
-data->accel_x = (int16_t)((buf[0]  << 8) | buf[1]);
-data->accel_y = (int16_t)((buf[2]  << 8) | buf[3]);
-data->accel_z = (int16_t)((buf[4]  << 8) | buf[5]);
-data->temp    = (int16_t)((buf[6]  << 8) | buf[7]);
-data->gyro_x  = (int16_t)((buf[8]  << 8) | buf[9]);
-data->gyro_y  = (int16_t)((buf[10] << 8) | buf[11]);
-data->gyro_z  = (int16_t)((buf[12] << 8) | buf[13]);
-
-// Return 0 to indicate success
-return 0;
-}
 
 // Convert a raw accelerometer reading into acceleration in g
 float mpu6050_accel_to_g(int16_t raw)
@@ -249,6 +218,10 @@ typedef struct {
 
     uint8_t initialized; // Indicates whether the filter has been initialized
 } imu_state_t;
+
+void imu_reset_state(imu_state_t *imu);
+void imu_calibrate(imu_state_t *imu, uint16_t samples);
+uint8_t imu_update(imu_state_t *imu, float dt_s);
 
 // Reset all processed IMU values, offsets, velocity, and position
 void imu_reset_state(imu_state_t *imu)
