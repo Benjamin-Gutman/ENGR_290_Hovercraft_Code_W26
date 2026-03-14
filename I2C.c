@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#define MPU6050_ADDR 0x68
+#define MPU_ADDR 0x68
 
 void I2C_init(void){ // This function initializes the status and bit rate register to set I2C at about 100 kHz if CPU at 16MHz
 	TWSR = 0;
