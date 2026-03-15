@@ -49,7 +49,10 @@ int main(void)
         // Update IMU estimation
         imu_update(&imu, 0.01f);
 		// Read new MPU6050 data and update roll, pitch, and yaw (dt ≈ 0.01 s = 10 ms)
-		UartPrint_u16((int16_t)imu.x_m);
+		
+		UartPrint_u16((int16_t)(imu.x_m * 100.0f));
+		//x100 because x_m is in meters, converting to cm
+		
         // Send yaw to servo
         servo_set_from_yaw((int16_t)imu.yaw_deg); //Converts float to int
 
