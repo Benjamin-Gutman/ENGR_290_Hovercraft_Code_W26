@@ -337,7 +337,8 @@ uint8_t imu_update(imu_state_t *imu, float dt_s)
     mpu6050_data_t raw;
     float roll_acc;
     float pitch_acc;
-    float ax_for_distance;
+    float pitch_rad;
+    float ax_linear_g;
     float ax_mps2;
 
     if (mpu6050_read_all(&raw) != 0) return 1;
@@ -350,14 +351,16 @@ uint8_t imu_update(imu_state_t *imu, float dt_s)
     imu->gy_dps = mpu6050_gyro_to_dps(raw.gyro_y) - imu->gy_bias_dps;
     imu->gz_dps = mpu6050_gyro_to_dps(raw.gyro_z) - imu->gz_bias_dps;
 
-    roll_acc  = atan2(imu->ay_g, imu->az_g) * 180.0 / M_PI;
-    pitch_acc = atan2(-imu->ax_g, sqrt(imu->ay_g * imu->ay_g + imu->az_g * imu->az_g)) * 180.0 / M_PI;
+    roll_acc  = atan2f(imu->ay_g, imu->az_g) * 180.0f / M_PI;
+    pitch_acc = atan2f(-imu->ax_g, sqrtf(imu->ay_g * imu->ay_g + imu->az_g * imu->az_g)) * 180.0f / M_PI;
 
     if (!imu->initialized) {
         imu->roll_deg = roll_acc;
         imu->pitch_deg = pitch_acc;
         imu->yaw_deg = 0.0f;
         imu->initialized = 1;
+        imu->prev_ax_mps2 = 0.0f;
+        imu->prev_vx_mps = 0.0f;
     }
 
     imu->roll_deg  = 0.98f * (imu->roll_deg  + imu->gx_dps * dt_s) + 0.02f * roll_acc;
@@ -365,18 +368,47 @@ uint8_t imu_update(imu_state_t *imu, float dt_s)
 
     imu->yaw_deg += imu->gz_dps * dt_s;
 
-    if (imu->yaw_deg > 180.0f) imu->yaw_deg -= 360.0f;
+    if (imu->yaw_deg > 180.0f)  imu->yaw_deg -= 360.0f;
     if (imu->yaw_deg < -180.0f) imu->yaw_deg += 360.0f;
 
-    ax_for_distance = imu->ax_g;
-    if (fabs(ax_for_distance) < 0.03f) ax_for_distance = 0.0f;
+    pitch_rad = imu->pitch_deg * M_PI / 180.0f;
 
-    ax_mps2 = ax_for_distance * 9.80665f;
-    imu->vx_mps += ax_mps2 * dt_s;
+    // Remove gravity component from X acceleration
+    ax_linear_g = imu->ax_g + sinf(pitch_rad);
 
-    if (fabs(imu->vx_mps) < 0.01f) imu->vx_mps = 0.0f;
+    // Deadband
+    if (fabsf(ax_linear_g) < 0.05f) {
+        ax_linear_g = 0.0f;
+    }
 
-    imu->x_m += imu->vx_mps * dt_s;
+    imu->ax_linear_g = ax_linear_g;
+    ax_mps2 = ax_linear_g * 9.80665f;
+    imu->ax_linear_mps2 = ax_mps2;
+
+    // Zero-velocity update when almost stationary
+    if (fabsf(ax_linear_g) < 0.05f &&
+        fabsf(imu->gx_dps) < 1.0f &&
+        fabsf(imu->gy_dps) < 1.0f &&
+        fabsf(imu->gz_dps) < 1.0f) {
+
+        imu->vx_mps = 0.0f;
+        imu->prev_vx_mps = 0.0f;
+        imu->prev_ax_mps2 = 0.0f;
+    } else {
+        // Trapezoidal integration for velocity
+        imu->vx_mps += 0.5f * (imu->prev_ax_mps2 + ax_mps2) * dt_s;
+
+        // Small velocity deadband
+        if (fabsf(imu->vx_mps) < 0.02f) {
+            imu->vx_mps = 0.0f;
+        }
+
+        // Trapezoidal integration for position
+        imu->x_m += 0.5f * (imu->prev_vx_mps + imu->vx_mps) * dt_s;
+
+        imu->prev_vx_mps = imu->vx_mps;
+        imu->prev_ax_mps2 = ax_mps2;
+    }
 
     return 0;
 }
