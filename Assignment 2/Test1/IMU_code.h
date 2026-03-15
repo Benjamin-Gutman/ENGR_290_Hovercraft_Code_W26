@@ -3,6 +3,10 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
     int16_t accel_x;
     int16_t accel_y;
@@ -58,6 +62,9 @@ typedef struct {
     float prev_vx_mps;
 
     uint8_t initialized;
+
+    float prev_ax_linear_g;  // For high-pass filter
+    float ax_hp_filter;      // High-pass filter state
 } imu_state_t;
 
 uint8_t mpu6050_init(void);
@@ -75,5 +82,7 @@ float mpu6050_temp_to_c(int16_t raw_temp);
 void imu_reset_state(imu_state_t *imu);
 void imu_calibrate(imu_state_t *imu, uint16_t samples);
 uint8_t imu_update(imu_state_t *imu, float dt_s);
-
+#ifdef __cplusplus
+}
+#endif
 #endif
