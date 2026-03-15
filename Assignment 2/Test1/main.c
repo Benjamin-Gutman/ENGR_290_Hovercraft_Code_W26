@@ -29,7 +29,7 @@ int main(void)
     // Apply IMU configuration before calibration
     mpu6050_set_accel_range(AFS_2G);
     mpu6050_set_gyro_range(GFS_250DPS);
-    mpu6050_set_dlpf(3);
+    mpu6050_set_dlpf(2);
     mpu6050_set_sample_rate_div(9);
 
     // Reset IMU internal state
