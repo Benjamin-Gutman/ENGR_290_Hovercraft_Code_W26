@@ -4,7 +4,6 @@
 
 #include <avr/io.h>
 #include <stdint.h>
-#include "uart.h"
 
 #define BAUD 9600UL
 #define UBRR_VALUE ((F_CPU/16/BAUD) - 1)
