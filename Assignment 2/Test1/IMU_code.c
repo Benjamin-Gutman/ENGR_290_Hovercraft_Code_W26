@@ -1,10 +1,12 @@
-#define F_CPU 16000000UL // CPU clock frequency = 16 MHz, used for delay and timing calculations
+#define F_CPU 16000000UL 
+// CPU clock frequency = 16 MHz, used for delay and timing calculations
 
 #include <avr/io.h> // AVR register definitions (ports, timers, control registers, etc.)
 #include <util/delay.h> // Delay functions such as _delay_ms() and _delay_us()
 #include <stdint.h> // Fixed-width integer types like uint8_t, int16_t, uint32_t
 #include <math.h> // Math functions such as sqrt(), atan2(), and fabs()
 #include "I2C_driver.h" //Header for the I2C functions
+#include "IMU_code.h"
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
