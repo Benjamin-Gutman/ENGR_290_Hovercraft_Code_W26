@@ -1,6 +1,5 @@
-//Code 1, without timer1 config
-//For servo control, using yaw of IMU as input
-//Sarkis S.
+//CODE 1.1, with timer1 config
+//and modified OCR values
 
 #include <avr/io.h>
 #include <stdint.h>
@@ -11,11 +10,11 @@
 //Calculation:
 //works in PWM
 //OCR1A = 1.0 x 2500/20 = 125
-#define SERVO_MIN_OCR     125   // 1.0 ms (-90deg)
-//OCR1A = 1.5 x 2500/20 = 188
-#define SERVO_CENTER_OCR  188   // 1.5 ms (center)
-//OCR1A = 2.0 x 2500/20 = 250
-#define SERVO_MAX_OCR     250   // 2.0 ms (+90deg)
+
+//MODIFIED VALUES
+#define SERVO_MIN_OCR     2000
+#define SERVO_CENTER_OCR  3000
+#define SERVO_MAX_OCR     4000
 
 //So, the allowed values for OCR1A is 125 - 250 
 //Calculated using the programming hint
@@ -74,14 +73,37 @@ void servo_set_from_yaw(int16_t yaw_deg) //In degrees
 //Call servo_set_from_yaw(imu_yaw_deg)
 //Where input is the yaw output from the IMU in degrees
 
-//To test this code, uncomment this next section:
-int main(void){
-int16_t yaw_deg = -85;//Replace this value to test all angles
+void timer1_servo_init(void) //Timer1 config for servo
+{
+    // D9 = PB1 = OC1A output
+    DDRB |= (1 << PB1);
 
-    servo_initialize();
-   while (1)
+    // Fast PWM, TOP = ICR1, non-inverting on OC1A
+    TCCR1A = 0;
+    TCCR1B = 0;
+
+    TCCR1A |= (1 << COM1A1);              // clear OC1A on compare match, set at BOTTOM
+    TCCR1A |= (1 << WGM11);
+    TCCR1B |= (1 << WGM13) | (1 << WGM12);
+
+    // Prescaler = 8
+    TCCR1B |= (1 << CS11);
+
+    // 16 MHz / 8 = 2 MHz, so 1 tick = 0.5 us
+    // 20 ms period => 40000 ticks
+    ICR1 = 40000;
+
+    // Center pulse = 1.5 ms = 3000 ticks
+    OCR1A = 3000;
+}
+
+int main(void)
+{
+  int16_t yaw_deg = -85;
+
+    timer1_servo_init();
+    while (1)
     {
       servo_set_from_yaw(yaw_deg);
     }
-
 }
