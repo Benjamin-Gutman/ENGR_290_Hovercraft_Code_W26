@@ -17,6 +17,8 @@ int main(void)
     uint16_t print_count = 0;
     int16_t x_cm;
     int16_t yaw_deg_int;
+    int16_t vel;
+    int16_t acc;
 
     // Initialize communication with IMU
     I2C_init();
@@ -57,12 +59,18 @@ int main(void)
 
             x_cm = (int16_t)(imu.x_m * 100.0f);
             yaw_deg_int = (int16_t)(imu.yaw_deg);
+            vel = (int16_t)(imu.vx_mps * 100.0f);
+            acc = (int16_t)(imu.ax_mps2 * 100.0f);
 
             UartPrintString("X = ");
            UartPrint_float(x_cm);
             UartPrintString(" cm   Yaw = ");
             UartPrint_float(yaw_deg_int);
-            UartPrintString(" deg");
+            UartPrintString(" deg  Velocity = ");
+             UartPrint_float(vel);
+            UartPrintString(" cm/s  Acceleration = ");
+            UartPrint_float(acc);
+
             UartAddNewLine();
         }
 
