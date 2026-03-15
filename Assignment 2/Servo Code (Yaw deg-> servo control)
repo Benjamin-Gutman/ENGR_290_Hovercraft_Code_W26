@@ -75,13 +75,13 @@ void servo_set_from_yaw(int16_t yaw_deg) //In degrees
 //Where input is the yaw output from the IMU in degrees
 
 //To test this code, uncomment this next section:
-//main(void){
-//int16_t yaw_deg = 0;//Replace this value to test all angles
+/**main(void){
+  int16_t yaw_deg = 0;//Replace this value to test all angles
 
-  //  servo_initialize();
-  //  while (1)
-  //  {
-  //    servo_set_from_yaw(yaw_deg);
-  //  }
+    servo_initialize();
+    while (1)
+    {
+      servo_set_from_yaw(yaw_deg);
+    }
 
-//}
+}**/
