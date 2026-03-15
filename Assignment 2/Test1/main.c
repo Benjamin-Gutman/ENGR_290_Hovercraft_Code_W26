@@ -5,10 +5,10 @@
 #include <stdint.h>
 #include <math.h>
 
-#include "I2C_driver.c"
-#include "IMU_code.c"
-#include "servo_code.c"
-#include "uart.c"
+#include "I2C_driver.h"
+#include "IMU_code.h"
+#include "servo_code.h"
+#include "uart.h"
 
 int main(void)
 {
