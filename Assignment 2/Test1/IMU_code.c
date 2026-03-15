@@ -4,7 +4,7 @@
 #include <util/delay.h> // Delay functions such as _delay_ms() and _delay_us()
 #include <stdint.h> // Fixed-width integer types like uint8_t, int16_t, uint32_t
 #include <math.h> // Math functions such as sqrt(), atan2(), and fabs()
-#include "I2C_driver.h" //Header for the I2C functions
+#include "I2C_driver.c" //Header for the I2C functions
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
