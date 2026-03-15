@@ -373,11 +373,11 @@ uint8_t imu_update(imu_state_t *imu, float dt_s)
 
     pitch_rad = imu->pitch_deg * M_PI / 180.0f;
 
-    // Remove gravity component from X acceleration
+    /* Remove gravity component from X acceleration */
     ax_linear_g = imu->ax_g + sinf(pitch_rad);
 
-    // Deadband
-    if (fabsf(ax_linear_g) < 0.05f) {
+    /* Smaller deadband so slow motion is not ignored */
+    if (fabsf(ax_linear_g) < 0.015f) {
         ax_linear_g = 0.0f;
     }
 
@@ -385,25 +385,26 @@ uint8_t imu_update(imu_state_t *imu, float dt_s)
     ax_mps2 = ax_linear_g * 9.80665f;
     imu->ax_linear_mps2 = ax_mps2;
 
-    // Zero-velocity update when almost stationary
-    if (fabsf(ax_linear_g) < 0.05f &&
+    /* Only zero velocity if everything is quiet AND speed is already very small */
+    if (fabsf(ax_linear_g) < 0.015f &&
         fabsf(imu->gx_dps) < 1.0f &&
         fabsf(imu->gy_dps) < 1.0f &&
-        fabsf(imu->gz_dps) < 1.0f) {
+        fabsf(imu->gz_dps) < 1.0f &&
+        fabsf(imu->vx_mps) < 0.03f) {
 
         imu->vx_mps = 0.0f;
         imu->prev_vx_mps = 0.0f;
         imu->prev_ax_mps2 = 0.0f;
     } else {
-        // Trapezoidal integration for velocity
+        /* Trapezoidal integration for velocity */
         imu->vx_mps += 0.5f * (imu->prev_ax_mps2 + ax_mps2) * dt_s;
 
-        // Small velocity deadband
-        if (fabsf(imu->vx_mps) < 0.02f) {
+        /* Smaller velocity deadband */
+        if (fabsf(imu->vx_mps) < 0.005f) {
             imu->vx_mps = 0.0f;
         }
 
-        // Trapezoidal integration for position
+        /* Trapezoidal integration for position */
         imu->x_m += 0.5f * (imu->prev_vx_mps + imu->vx_mps) * dt_s;
 
         imu->prev_vx_mps = imu->vx_mps;
