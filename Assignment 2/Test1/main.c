@@ -10,19 +10,6 @@
 #include "servo_code.h"
 #include "uart.h"
 
-void UartPrint_s16(int16_t value)
-{
-    uint16_t magnitude;
-
-    if (value < 0) {
-        UartPrintString("-");
-        magnitude = (uint16_t)(-(int32_t)value);
-    } else {
-        magnitude = (uint16_t)value;
-    }
-
-    UartPrint_u16(magnitude);
-}
 
 int main(void)
 {
@@ -72,9 +59,9 @@ int main(void)
             yaw_deg_int = (int16_t)(imu.yaw_deg);
 
             UartPrintString("X = ");
-            UartPrint_s16(x_cm);
+           UartPrint_float(x_cm);
             UartPrintString(" cm   Yaw = ");
-            UartPrint_s16(yaw_deg_int);
+            UartPrint_float(yaw_deg_int);
             UartPrintString(" deg");
             UartAddNewLine();
         }
