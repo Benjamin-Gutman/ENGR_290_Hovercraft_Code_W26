@@ -1,5 +1,5 @@
 //Servo attached to P9
-//IMU attached
+//IMU attached to P7 or P19
 #include <avr/io.h>
 #include <util/delay.h>
 #include <stdint.h>
