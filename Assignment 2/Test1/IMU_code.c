@@ -17,28 +17,50 @@
 
 //MPU6050 registers-> Register addresses used to read data from and configure the MPU6050
 
-#define MPU_ADDR        0x68 // Default I2C address of the MPU6050
-#define MPU6050_WHO_AM_I    0x75 // Identification register used to verify the device
-#define MPU6050_PWR_MGMT_1  0x6B  // Power management register used to wake up and configure the sensor clock
-#define MPU6050_ACCEL_XOUT_H 0x3B   // Accelerometer X-axis high byte
-#define MPU6050_ACCEL_XOUT_L 0x3C   // Accelerometer X-axis low byte
-#define MPU6050_ACCEL_YOUT_H 0x3D   // Accelerometer Y-axis high byte
-#define MPU6050_ACCEL_YOUT_L 0x3E   // Accelerometer Y-axis low byte
-#define MPU6050_ACCEL_ZOUT_H 0x3F   // Accelerometer Z-axis high byte
-#define MPU6050_ACCEL_ZOUT_L 0x40   // Accelerometer Z-axis low byte
-#define MPU6050_TEMP_OUT_H 0x41   // Temperature sensor high byte
-#define MPU6050_TEMP_OUT_L 0x42   // Temperature sensor low byte
-#define MPU6050_GYRO_XOUT_H 0x43   // Gyroscope X-axis high byte
-#define MPU6050_GYRO_XOUT_L 0x44   // Gyroscope X-axis low byte
-#define MPU6050_GYRO_YOUT_H 0x45   // Gyroscope Y-axis high byte
-#define MPU6050_GYRO_YOUT_L 0x46   // Gyroscope Y-axis low byte
-#define MPU6050_GYRO_ZOUT_H 0x47   // Gyroscope Z-axis high byte
-#define MPU6050_GYRO_ZOUT_L 0x48   // Gyroscope Z-axis low byte
-#define MPU6050_ACCEL_CONFIG 0x1C   // Accelerometer configuration register (full-scale range)
-#define MPU6050_GYRO_CONFIG 0x1B   // Gyroscope configuration register (full-scale range)
-#define MPU6050_SMPLRT_DIV 0x19   // Sample rate divider register
-#define MPU6050_CONFIG 0x1A   // General configuration register, including the digital low-pass filter
-#define MPU6050_INT_ENABLE 0x38   // Interrupt enable register
+#define MPU_ADDR        0x68 
+// Default I2C address of the MPU6050
+#define MPU6050_WHO_AM_I    0x75 
+// Identification register used to verify the device
+#define MPU6050_PWR_MGMT_1  0x6B  
+// Power management register used to wake up and configure the sensor clock
+#define MPU6050_ACCEL_XOUT_H 0x3B   
+// Accelerometer X-axis high byte
+#define MPU6050_ACCEL_XOUT_L 0x3C   
+// Accelerometer X-axis low byte
+#define MPU6050_ACCEL_YOUT_H 0x3D  
+// Accelerometer Y-axis high byte
+#define MPU6050_ACCEL_YOUT_L 0x3E   
+// Accelerometer Y-axis low byte
+#define MPU6050_ACCEL_ZOUT_H 0x3F   
+// Accelerometer Z-axis high byte
+#define MPU6050_ACCEL_ZOUT_L 0x40   
+// Accelerometer Z-axis low byte
+#define MPU6050_TEMP_OUT_H 0x41   
+// Temperature sensor high byte
+#define MPU6050_TEMP_OUT_L 0x42   
+// Temperature sensor low byte
+#define MPU6050_GYRO_XOUT_H 0x43   
+// Gyroscope X-axis high byte
+#define MPU6050_GYRO_XOUT_L 0x44   
+// Gyroscope X-axis low byte
+#define MPU6050_GYRO_YOUT_H 0x45   
+// Gyroscope Y-axis high byte
+#define MPU6050_GYRO_YOUT_L 0x46   
+// Gyroscope Y-axis low byte
+#define MPU6050_GYRO_ZOUT_H 0x47   
+// Gyroscope Z-axis high byte
+#define MPU6050_GYRO_ZOUT_L 0x48   
+// Gyroscope Z-axis low byte
+#define MPU6050_ACCEL_CONFIG 0x1C   
+// Accelerometer configuration register (full-scale range)
+#define MPU6050_GYRO_CONFIG 0x1B   
+// Gyroscope configuration register (full-scale range)
+#define MPU6050_SMPLRT_DIV 0x19   
+// Sample rate divider register
+#define MPU6050_CONFIG 0x1A   
+// General configuration register, including the digital low-pass filter
+#define MPU6050_INT_ENABLE 0x38   
+// Interrupt enable register
 
 
 // Structure used to store the raw sensor readings from the MPU6050
