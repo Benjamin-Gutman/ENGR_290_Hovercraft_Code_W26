@@ -2,6 +2,7 @@
 #include <util/delay.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include "I2C_driver.h"
 
 #define MPU_ADDR 0x68
 
