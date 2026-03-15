@@ -39,13 +39,17 @@ int main(void)
 	
 	//Initializes uart funcs
 	UartInitialize();
-
+	//Functions you can use;
+	// UartPrintString(" ");
+	// UartPrint_u16();
+	// UartAddNewLine();
+	
     while (1)
     {
         // Update IMU estimation
         imu_update(&imu, 0.01f);
-	// Read new MPU6050 data and update roll, pitch, and yaw (dt ≈ 0.01 s = 10 ms)
-				
+		// Read new MPU6050 data and update roll, pitch, and yaw (dt ≈ 0.01 s = 10 ms)
+		UartPrint_u16((int16_t)imu.x_m);
         // Send yaw to servo
         servo_set_from_yaw((int16_t)imu.yaw_deg); //Converts float to int
 
