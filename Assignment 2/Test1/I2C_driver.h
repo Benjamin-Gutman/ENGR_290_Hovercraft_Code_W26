@@ -3,6 +3,10 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define MPU_ADDR 0x68
 
 void I2C_init(void);
@@ -14,5 +18,9 @@ uint8_t I2C_read_ack(void);
 uint8_t I2C_read_nack(void);
 uint8_t I2C_read_reg(uint8_t Register);
 void I2C_read_multiple_reg(uint8_t Base_reg, uint8_t* values, int range);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
