@@ -35,6 +35,9 @@ int main(void)
     // Initialize servo
     servo_initialize();
     //From servo_code
+	
+	//Initializes uart funcs
+	UartInitialize();
 
     while (1)
     {
