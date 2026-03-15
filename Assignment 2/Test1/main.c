@@ -38,7 +38,7 @@ int main(void)
     {
         // Update IMU estimation
         imu_update(&imu, 0.01f);
-	// Read new MPU6050 data and update roll, pitch, and yaw (dt \uc0\u8776  0.01 s = 10 ms)
+	// Read new MPU6050 data and update roll, pitch, and yaw (dt ≈ 0.01 s = 10 ms)
 				
         // Send yaw to servo
         servo_set_from_yaw((int16_t)imu.yaw_deg); //Converts float to int
