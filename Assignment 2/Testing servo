@@ -1,110 +1,58 @@
-//CODE 1.1, with timer1 config
-//and modified OCR values
-
 #include <avr/io.h>
 #include <stdint.h>
 
-#define SERVO_MIN_ANGLE   (-85) //Min angle allowed
-#define SERVO_MAX_ANGLE   (85)  //Max angle allowed
+#define SERVO_MIN_ANGLE   (-85)
+#define SERVO_MAX_ANGLE   (85)
 
-//Calculation:
-//works in PWM
-//OCR1A = 1.0 x 2500/20 = 125
-
-//MODIFIED VALUES
 #define SERVO_MIN_OCR     2000
 #define SERVO_CENTER_OCR  3000
 #define SERVO_MAX_OCR     4000
 
-//So, the allowed values for OCR1A is 125 - 250 
-//Calculated using the programming hint
-
-//Whatever value is inputted in OCR1A directly controls the servo
-//Using this formula OCR1A = a x 2500/20
-
-static int16_t force_yaw(int16_t yaw) 
-//This function takes the yaw from IMU 
-//and forces the input yaw to the servo to be bounded by min and max allowed
+static int16_t force_yaw(int16_t yaw)
 {
     if (yaw > SERVO_MAX_ANGLE) return SERVO_MAX_ANGLE;
     if (yaw < SERVO_MIN_ANGLE) return SERVO_MIN_ANGLE;
     return yaw;
 }
 
-void servo_initialize(void) //Initiatlizes the servo to the ports
+void timer1_servo_init(void)
 {
-    // PB1 = OC1A = servo output on P9
     DDRB |= (1 << PB1);
-		//set PB1 as output pin
-		//From controller doc
-		
-    // Timer1 setup function should technically be already done with the rest of the code
-    // for the 20 ms servo period
-    
-    //input to 0CR1A controls the servo
-    OCR1A = SERVO_CENTER_OCR;  //By default, centered
+
+    TCCR1A = 0;
+    TCCR1B = 0;
+
+    TCCR1A |= (1 << COM1A1);
+    TCCR1A |= (1 << WGM11);
+    TCCR1B |= (1 << WGM13) | (1 << WGM12);
+
+    TCCR1B |= (1 << CS11);
+
+    ICR1 = 40000;
+    OCR1A = SERVO_CENTER_OCR;
 }
 
-void servo_set_from_yaw(int16_t yaw_deg) //In degrees
+void servo_set_from_yaw(int16_t yaw_deg)
 {
     int16_t yaw_forced;
     int32_t ocr;
 
-    yaw_forced = force_yaw(yaw_deg); //This calls the function that forces the yaw to be within range
-
-    // Linear mapping:
-    // -85 deg -> 125
-    //   0 deg -> 188
-    // +85 deg -> 250
-    //
-    // ocr = 125 + (yaw + 85) * (250 - 125) / 170
+    yaw_forced = force_yaw(yaw_deg);
 
     ocr = SERVO_MIN_OCR;
- //Linear interpolation
     ocr += ((int32_t)(yaw_forced + 85) * (SERVO_MAX_OCR - SERVO_MIN_OCR)) / 170;
-//using formula above
 
-    OCR1A = (uint16_t)ocr; //down scale to 16
-}
-
-//TO USE THIS function in MAIN():
-//1. Call servo_initialize();
-//2. In an infinite loop:
-//Call servo_set_from_yaw(imu_yaw_deg)
-//Where input is the yaw output from the IMU in degrees
-
-void timer1_servo_init(void) //Timer1 config for servo
-{
-    // D9 = PB1 = OC1A output
-    DDRB |= (1 << PB1);
-
-    // Fast PWM, TOP = ICR1, non-inverting on OC1A
-    TCCR1A = 0;
-    TCCR1B = 0;
-
-    TCCR1A |= (1 << COM1A1);              // clear OC1A on compare match, set at BOTTOM
-    TCCR1A |= (1 << WGM11);
-    TCCR1B |= (1 << WGM13) | (1 << WGM12);
-
-    // Prescaler = 8
-    TCCR1B |= (1 << CS11);
-
-    // 16 MHz / 8 = 2 MHz, so 1 tick = 0.5 us
-    // 20 ms period => 40000 ticks
-    ICR1 = 40000;
-
-    // Center pulse = 1.5 ms = 3000 ticks
-    OCR1A = 3000;
+    OCR1A = (uint16_t)ocr;
 }
 
 int main(void)
 {
-  int16_t yaw_deg = -85;
-	servo_initialize();
+    int16_t yaw_deg = 0;
 
     timer1_servo_init();
+
     while (1)
     {
-      servo_set_from_yaw(yaw_deg);
+        servo_set_from_yaw(yaw_deg);
     }
 }
