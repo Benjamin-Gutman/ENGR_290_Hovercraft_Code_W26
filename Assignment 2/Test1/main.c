@@ -8,6 +8,7 @@
 #include "I2C_driver.h"
 #include "IMU_code.h"
 #include "servo_code.h"
+#include "uart.h"
 
 int main(void)
 {
