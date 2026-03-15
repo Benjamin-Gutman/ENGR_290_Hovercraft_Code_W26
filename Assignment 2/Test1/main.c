@@ -34,7 +34,7 @@ int main(void)
     //From imu_code
 
     // Initialize servo
-    servo_initialize();
+    timer1_servo_init();
     //From servo_code
 	
 	//Initializes uart funcs
@@ -53,6 +53,8 @@ int main(void)
 		UartPrint_u16((int16_t)(imu.x_m * 100.0f));
 		//x100 because x_m is in meters, converting to cm
 		UartPrintString(" cm");
+		UartAddNewLine();
+		UartPrint_u16((int16_t)(imu.yaw_deg));
 		UartAddNewLine();
 		
         // Send yaw to servo
