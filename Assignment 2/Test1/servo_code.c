@@ -3,6 +3,7 @@
 
 #include <avr/io.h>
 #include <stdint.h>
+#include "servo_code.h"
 
 #define SERVO_MIN_ANGLE   (-85) //Min angle allowed
 #define SERVO_MAX_ANGLE   (85)  //Max angle allowed
