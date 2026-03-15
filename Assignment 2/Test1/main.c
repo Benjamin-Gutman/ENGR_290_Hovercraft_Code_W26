@@ -1,4 +1,6 @@
- #include <avr/io.h>
+//Servo attached to P9
+//IMU attached
+#include <avr/io.h>
 #include <util/delay.h>
 #include <stdint.h>
 #include <math.h>
