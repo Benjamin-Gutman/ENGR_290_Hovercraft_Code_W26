@@ -51,6 +51,12 @@ typedef struct {
     float vx_mps;
     float x_m;
 
+    float ax_linear_g;
+    float ax_linear_mps2;
+
+    float prev_ax_mps2;
+    float prev_vx_mps;
+
     uint8_t initialized;
 } imu_state_t;
 
