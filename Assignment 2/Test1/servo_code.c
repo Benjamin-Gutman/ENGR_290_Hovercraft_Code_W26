@@ -9,9 +9,9 @@
 //Servo PWM pulse width values (Timer1 ticks)
 //These values correspond to the pulse width sent to the servo
 
-#define SERVO_MIN_OCR     2000  //1.0 ms pulse -> about -90 degrees
+#define SERVO_MIN_OCR     4000  //1.0 ms pulse -> about -85 degrees
 #define SERVO_CENTER_OCR  3000  //1.5 ms pulse -> center position
-#define SERVO_MAX_OCR     4000  //2.0 ms pulse -> about +90 degrees
+#define SERVO_MAX_OCR     2000  //2.0 ms pulse -> about +85 degrees
 
 //Whatever value is written into OCR1A controls the servo position
 //Timer1 generates the PWM signal and OCR1A defines the pulse width
@@ -63,16 +63,16 @@ void servo_set_from_yaw(int16_t yaw_deg)
 
     yaw_forced = force_yaw(yaw_deg);
 
-    // Reversed linear mapping:
-    // -85 deg -> 4000
+    // Linear mapping:
+    // -85 deg -> 2000
     //   0 deg -> 3000
-    // +85 deg -> 2000
+    // +85 deg -> 4000
     //Because the servo was moving opposite direction of IMU
 
     ocr = SERVO_MIN_OCR;
 
     //Linear interpolation between min and max servo pulse widths
-    ocr -= ((int32_t)(yaw_forced + 85) * (SERVO_MAX_OCR - SERVO_MIN_OCR)) / 170;
+    ocr += ((int32_t)(yaw_forced + 85) * (SERVO_MAX_OCR - SERVO_MIN_OCR)) / 170;
 
     //Write the calculated value into OCR1A
     //OCR1A controls the PWM pulse width sent to the servo
