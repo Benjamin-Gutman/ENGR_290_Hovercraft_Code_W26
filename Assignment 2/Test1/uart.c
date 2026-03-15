@@ -68,3 +68,46 @@ void UartPrint_u16(uint16_t value)
         UartPrintCharacter(buffer[--i]);
     }
 }
+
+void UartPrint_i16(int16_t value)
+{
+    // Print signed 16-bit integer
+    if (value < 0)
+    {
+        UartPrintCharacter('-');
+        value = -value;
+    }
+
+    UartPrint_u16((uint16_t)value);
+}
+
+void UartPrint_float(float value)
+{
+    int16_t integer_part;
+    uint16_t fractional_part;
+
+    // Handle negative sign
+    if (value < 0)
+    {
+        UartPrintCharacter('-');
+        value = -value;
+    }
+
+    // Separate integer and decimal parts
+    integer_part = (int16_t)value;
+    fractional_part = (uint16_t)((value - integer_part) * 100.0f);
+
+    // Print integer part
+    UartPrint_u16((uint16_t)integer_part);
+
+    // Print decimal point
+    UartPrintCharacter('.');
+
+    // Always print 2 digits after decimal point
+    if (fractional_part < 10)
+    {
+        UartPrintCharacter('0');
+    }
+
+    UartPrint_u16(fractional_part);
+}
