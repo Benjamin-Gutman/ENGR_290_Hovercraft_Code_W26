@@ -17,12 +17,24 @@
 //Timer1 generates the PWM signal and OCR1A defines the pulse width
 
 static int16_t force_yaw(int16_t yaw)
-//This function takes the yaw value from IMU
-//and forces the input yaw to stay within the allowed servo range
+/** This function takes the yaw value from IMU
+and forces the input yaw to stay within the allowed servo range
+Also turns on LED_L if our of range **/
 {
-    if (yaw > SERVO_MAX_ANGLE) return SERVO_MAX_ANGLE;
-    if (yaw < SERVO_MIN_ANGLE) return SERVO_MIN_ANGLE;
-    return yaw;
+    if (yaw > SERVO_MAX_ANGLE) 
+    {
+        LEDL_PORT |= (1 << LEDL_BIT);   // LEDL on 
+         return SERVO_MAX_ANGLE;
+    }
+
+    if (yaw < SERVO_MIN_ANGLE)
+    { 
+         LEDL_PORT |= (1 << LEDL_BIT);   // LEDL on
+         return SERVO_MIN_ANGLE;
+    }
+    
+    LEDL_PORT &= ~(1 << LEDL_BIT);      // LEDL off
+    return yaw;  
 }
 
 void timer1_servo_init(void) //Timer1 configuration for servo PWM
