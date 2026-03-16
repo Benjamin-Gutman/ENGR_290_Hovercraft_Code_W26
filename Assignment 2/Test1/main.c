@@ -1,5 +1,3 @@
-//Servo attached to P9
-//IMU attached to P7 or P19
 #include <avr/io.h>
 #include <util/delay.h>
 #include <stdint.h>
@@ -10,57 +8,58 @@
 #include "servo_code.h"
 #include "uart.h"
 
-
 int main(void)
 {
-    imu_state_t imu;
+ 
     uint16_t print_count = 0;
-    int16_t x_cm;
+    int32_t x_cm;
     int16_t yaw_deg_int;
     int16_t vel;
     int16_t acc;
 
+    imu_state_t imu;
+    // Structure that stores all IMU data and computed orientation 
+    //(roll, pitch, yaw)
+    //This is created in imu_code
+    
     // Initialize communication with IMU
     I2C_init();
+    //From I2C_driver
 
     // Initialize MPU6050 sensor
     mpu6050_init();
-
-    // Apply IMU configuration before calibration
-    mpu6050_set_accel_range(AFS_2G);
-    mpu6050_set_gyro_range(GFS_250DPS);
-    mpu6050_set_dlpf(2);
-    mpu6050_set_sample_rate_div(9);
+    //From imu_code
 
     // Reset IMU internal state
     imu_reset_state(&imu);
+    //From imu_code
 
-    // Calibrate IMU while completely still
+    // Calibrate IMU 
     imu_calibrate(&imu, 500);
+    //From imu_code
 
     // Initialize servo
     timer1_servo_init();
-
-    // Initialize UART
+    //From servo_code
     UartInitialize();
 
     while (1)
     {
         // Update IMU estimation
         imu_update(&imu, 0.01f);
-
+	// Read new MPU6050 data and update roll, pitch, and yaw (dt ≈ 0.01 s = 10 ms)
+				
         // Send yaw to servo
-        servo_set_from_yaw((int16_t)imu.yaw_deg);
-
-        // Print about once per second instead of every 10 ms
+        servo_set_from_yaw((int16_t)imu.yaw_deg); //Converts float to int
+// Print about once per second instead of every 10 ms
         print_count++;
         if (print_count >= 100) {
             print_count = 0;
 
-            x_cm = (int16_t)(imu.x_m * 100.0f);
+            x_cm = (int32_t)(imu.x_m * 100.0f);
             yaw_deg_int = (int16_t)(imu.yaw_deg);
             vel = (int16_t)(imu.vx_mps * 100.0f);
-            acc = (int16_t)(imu.ax_mps2 * 100.0f);
+            acc = (int16_t)(imu.ax_linear_mps2 * 100.0f);
 
             UartPrintString("X = ");
            UartPrint_float(x_cm);
@@ -72,8 +71,6 @@ int main(void)
             UartPrint_float(acc);
 
             UartAddNewLine();
-        }
-
         _delay_ms(10);
     }
-}
+    }}
