@@ -7,6 +7,7 @@
 #include "IMU_code.h"
 #include "servo_code.h"
 #include "uart.h"
+#include "led_control.h"
 
 int main(void)
 {
@@ -42,13 +43,19 @@ int main(void)
     timer1_servo_init();
     //From servo_code
     UartInitialize();
+	
+	// Initiallize LED PWM accel control
+	led_init();
+
+	
 
     while (1)
     {
         // Update IMU estimation
         imu_update(&imu, 0.01f);
 	// Read new MPU6050 data and update roll, pitch, and yaw (dt ≈ 0.01 s = 10 ms)
-				
+		// Send accel_x_g to LED with PWM brightness control
+		led_set_axg(imu.ax_g);
         // Send yaw to servo
         servo_set_from_yaw((int16_t)imu.yaw_deg); //Converts float to int
 // Print about once per second instead of every 10 ms
