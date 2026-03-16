@@ -136,95 +136,42 @@ float mpu6050_temp_to_c(int16_t raw_temp)
     return ((float)raw_temp / 340.0f) + 36.53f;
 }
 
-uint8_t imu_update(imu_state_t *imu, float dt_s)
+void imu_reset_state(imu_state_t *imu)
 {
-    mpu6050_data_t raw;
-    float roll_acc;
-    float pitch_acc;
-    float pitch_rad;
-    float ax_linear_g;
-    float ax_mps2;
-    float alpha;
-    float accel_deadband;
-    float vel_deadband;
-    uint8_t is_stationary;
+    if (imu == 0) return;
 
-    if (mpu6050_read_all(&raw) != 0) return 1;
+    imu->ax_g = 0.0f;
+    imu->ay_g = 0.0f;
+    imu->az_g = 0.0f;
 
-    imu->ax_g = mpu6050_accel_to_g(raw.accel_x) - imu->ax_bias_g;
-    imu->ay_g = mpu6050_accel_to_g(raw.accel_y) - imu->ay_bias_g;
-    imu->az_g = mpu6050_accel_to_g(raw.accel_z) - imu->az_bias_g;
+    imu->gx_dps = 0.0f;
+    imu->gy_dps = 0.0f;
+    imu->gz_dps = 0.0f;
 
-    imu->gx_dps = mpu6050_gyro_to_dps(raw.gyro_x) - imu->gx_bias_dps;
-    imu->gy_dps = mpu6050_gyro_to_dps(raw.gyro_y) - imu->gy_bias_dps;
-    imu->gz_dps = mpu6050_gyro_to_dps(raw.gyro_z) - imu->gz_bias_dps;
+    imu->roll_deg = 0.0f;
+    imu->pitch_deg = 0.0f;
+    imu->yaw_deg = 0.0f;
 
-    roll_acc  = atan2f(imu->ay_g, imu->az_g) * 180.0f / M_PI;
-    pitch_acc = atan2f(-imu->ax_g, sqrtf(imu->ay_g * imu->ay_g + imu->az_g * imu->az_g)) * 180.0f / M_PI;
+    imu->ax_bias_g = 0.0f;
+    imu->ay_bias_g = 0.0f;
+    imu->az_bias_g = 0.0f;
 
-    if (!imu->initialized) {
-        imu->roll_deg = roll_acc;
-        imu->pitch_deg = pitch_acc;
-        imu->yaw_deg = 0.0f;
-        imu->initialized = 1;
+    imu->gx_bias_dps = 0.0f;
+    imu->gy_bias_dps = 0.0f;
+    imu->gz_bias_dps = 0.0f;
 
-        imu->prev_ax_mps2 = 0.0f;
-        imu->prev_vx_mps = 0.0f;
-        imu->ax_hp_filter = 0.0f;
-        imu->prev_ax_linear_g = 0.0f;
-    }
+    imu->vx_mps = 0.0f;
+    imu->x_m = 0.0f;
 
-    imu->roll_deg  = 0.98f * (imu->roll_deg  + imu->gx_dps * dt_s) + 0.02f * roll_acc;
-    imu->pitch_deg = 0.98f * (imu->pitch_deg + imu->gy_dps * dt_s) + 0.02f * pitch_acc;
+    imu->ax_linear_g = 0.0f;
+    imu->ax_linear_mps2 = 0.0f;
+    imu->prev_ax_mps2 = 0.0f;
+    imu->prev_vx_mps = 0.0f;
 
-    imu->yaw_deg += imu->gz_dps * dt_s;
+    imu->ax_hp_filter = 0.0f;
+    imu->prev_ax_linear_g = 0.0f;
 
-    if (imu->yaw_deg > 180.0f)  imu->yaw_deg -= 360.0f;
-    if (imu->yaw_deg < -180.0f) imu->yaw_deg += 360.0f;
-
-    pitch_rad = imu->pitch_deg * M_PI / 180.0f;
-
-    ax_linear_g = imu->ax_g + sinf(pitch_rad);
-
-    alpha = 0.996f;
-    imu->ax_hp_filter = alpha * (imu->ax_hp_filter + ax_linear_g - imu->prev_ax_linear_g);
-    imu->prev_ax_linear_g = ax_linear_g;
-    ax_linear_g = imu->ax_hp_filter;
-
-    accel_deadband = 0.03f;
-    vel_deadband = 0.01f;
-
-    if (fabsf(ax_linear_g) < accel_deadband) {
-        ax_linear_g = 0.0f;
-    }
-
-    imu->ax_linear_g = ax_linear_g;
-    ax_mps2 = ax_linear_g * 9.80665f;
-    imu->ax_linear_mps2 = ax_mps2;
-
-    is_stationary = (fabsf(imu->gx_dps) < 1.0f &&
-                     fabsf(imu->gy_dps) < 1.0f &&
-                     fabsf(imu->gz_dps) < 1.0f &&
-                     fabsf(ax_linear_g) < accel_deadband);
-
-    if (is_stationary) {
-        imu->vx_mps *= 0.9f;
-
-        if (fabsf(imu->vx_mps) < vel_deadband) {
-            imu->vx_mps = 0.0f;
-            imu->prev_vx_mps = 0.0f;
-            imu->prev_ax_mps2 = 0.0f;
-        }
-    } else {
-        imu->vx_mps += 0.5f * (imu->prev_ax_mps2 + ax_mps2) * dt_s;
-        imu->vx_mps *= 0.999f;
-        imu->x_m += 0.5f * (imu->prev_vx_mps + imu->vx_mps) * dt_s;
-
-        imu->prev_vx_mps = imu->vx_mps;
-        imu->prev_ax_mps2 = ax_mps2;
-    }
-
-    return 0;
+    imu->initialized = 0;
 }
 
 void imu_calibrate(imu_state_t *imu, uint16_t samples)
