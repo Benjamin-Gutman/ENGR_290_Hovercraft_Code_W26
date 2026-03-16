@@ -1,4 +1,5 @@
-#define F_CPU 16000000UL
+
+ #define F_CPU 16000000UL
 // CPU clock frequency = 16 MHz, used for delay and timing calculations
 
 #include <avr/io.h>
@@ -163,6 +164,8 @@ void imu_reset_state(imu_state_t *imu)
     imu->ax_linear_mps2 = 0.0f;
     imu->prev_ax_mps2 = 0.0f;
     imu->prev_vx_mps = 0.0f;
+    imu->ax_hp_filter = 0.0f;
+    imu->prev_ax_linear_g = 0.0f;
 
     imu->initialized = 0;
 }
@@ -249,21 +252,18 @@ uint8_t imu_update(imu_state_t *imu, float dt_s)
     pitch_rad = imu->pitch_deg * M_PI / 180.0f;
 
     // Fix gravity compensation
-    ax_linear_g = imu->ax_g + sinf(pitch_rad);  // Add because we subtracted gravity in calibration
+    ax_linear_g = imu->ax_g;
 
     // Apply high-pass filter to remove DC bias (0.1 Hz cutoff)
-    float alpha = 0.996f; // For 100Hz sampling, 0.1Hz cutoff
-    imu->ax_hp_filter = alpha * (imu->ax_hp_filter + ax_linear_g - imu->prev_ax_linear_g);
     imu->prev_ax_linear_g = ax_linear_g;
-    ax_linear_g = imu->ax_hp_filter;
 
     // Consistent deadband
     const float ACCEL_DEADBAND = 0.03f;  // 30 mg
     const float VEL_DEADBAND = 0.01f;    // 1 cm/s
     
-    if (fabsf(ax_linear_g) < ACCEL_DEADBAND) {
-        ax_linear_g = 0.0f;
-    }
+    // if (fabsf(ax_linear_g) < ACCEL_DEADBAND) {
+    //     ax_linear_g = 0.0f;
+    // }
 
     imu->ax_linear_g = ax_linear_g;
     ax_mps2 = ax_linear_g * 9.80665f;
@@ -275,27 +275,16 @@ uint8_t imu_update(imu_state_t *imu, float dt_s)
                              fabsf(imu->gz_dps) < 1.0f &&
                              fabsf(ax_linear_g) < ACCEL_DEADBAND);
 
-    if (is_stationary) {
-        // Stronger damping when stationary
-        imu->vx_mps *= 0.9f;
-        if (fabsf(imu->vx_mps) < VEL_DEADBAND) {
-            imu->vx_mps = 0.0f;
-            imu->prev_vx_mps = 0.0f;
-            imu->prev_ax_mps2 = 0.0f;
-        }
-    } else {
+    
         // Trapezoidal integration for velocity
         imu->vx_mps += 0.5f * (imu->prev_ax_mps2 + ax_mps2) * dt_s;
-
-        // Very light damping even when moving (prevents unbounded drift)
-        imu->vx_mps *= 0.999f;
 
         // Trapezoidal integration for position
         imu->x_m += 0.5f * (imu->prev_vx_mps + imu->vx_mps) * dt_s;
 
         imu->prev_vx_mps = imu->vx_mps;
         imu->prev_ax_mps2 = ax_mps2;
-    }
+    
 
     return 0;
 }
