@@ -47,6 +47,7 @@ int main(void)
     //Initialize L Led
     imu_led_init();
 
+    d3_led_init();
 
     while (1)
     {
@@ -57,7 +58,8 @@ int main(void)
         servo_set_from_yaw((int16_t)imu.yaw_deg);
 
         imu_led_update(imu.yaw_deg);
-        
+
+        d3_led_update(ax_mps2); //is ax_mps2 correct??
         // Print about once per second instead of every 10 ms
         print_count++;
         if (print_count >= 100) {
