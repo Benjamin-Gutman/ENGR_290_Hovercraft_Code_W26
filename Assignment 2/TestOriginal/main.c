@@ -44,6 +44,10 @@ int main(void)
     // Initialize UART
     UartInitialize();
 
+    //Initialize L Led
+    imu_led_init();
+
+
     while (1)
     {
         // Update IMU estimation
@@ -52,6 +56,8 @@ int main(void)
         // Send yaw to servo
         servo_set_from_yaw((int16_t)imu.yaw_deg);
 
+        imu_led_update(imu.yaw_deg);
+        
         // Print about once per second instead of every 10 ms
         print_count++;
         if (print_count >= 100) {
