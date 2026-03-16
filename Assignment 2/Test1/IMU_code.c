@@ -186,6 +186,8 @@ void imu_calibrate(imu_state_t *imu, uint16_t samples)
     float sum_gy = 0.0f;
     float sum_gz = 0.0f;
 
+    if (imu == 0 || samples == 0) return;
+
     for (i = 0; i < samples; i++) {
         if (mpu6050_read_all(&raw) == 0) {
             sum_ax += mpu6050_accel_to_g(raw.accel_x);
@@ -224,6 +226,7 @@ uint8_t imu_update(imu_state_t *imu, float dt_s)
     float vel_deadband;
     uint8_t is_stationary;
 
+    if (imu == 0 || dt_s <= 0.0f) return 1;
     if (mpu6050_read_all(&raw) != 0) return 1;
 
     imu->ax_g = mpu6050_accel_to_g(raw.accel_x) - imu->ax_bias_g;
@@ -287,9 +290,10 @@ uint8_t imu_update(imu_state_t *imu, float dt_s)
 
         if (fabsf(imu->vx_mps) < vel_deadband) {
             imu->vx_mps = 0.0f;
-            imu->prev_vx_mps = 0.0f;
-            imu->prev_ax_mps2 = 0.0f;
         }
+
+        imu->prev_vx_mps = imu->vx_mps;
+        imu->prev_ax_mps2 = 0.0f;
     } else {
         imu->vx_mps += 0.5f * (imu->prev_ax_mps2 + ax_mps2) * dt_s;
         imu->vx_mps *= 0.999f;
