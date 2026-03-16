@@ -9,6 +9,8 @@
 #include "IMU_code.h"
 #include "servo_code.h"
 #include "uart.h"
+#include "d3_led.h"
+#include "L_led.h"
 
 
 int main(void)
