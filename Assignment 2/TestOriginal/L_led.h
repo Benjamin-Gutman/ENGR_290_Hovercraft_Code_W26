@@ -1,5 +1,5 @@
-#ifndef IMU_LED_H
-#define IMU_LED_H
+#ifndef L_LED_H
+#define L_LED_H
 
 #include <stdint.h>
 
