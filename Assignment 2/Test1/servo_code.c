@@ -13,6 +13,18 @@
 #define SERVO_CENTER_OCR  3000  //1.5 ms pulse -> center position
 #define SERVO_MAX_OCR     2000  //2.0 ms pulse -> about +85 degrees
 
+/** -------------- Pin Assignments --------------
+    LED D3 (PWM): PD3 (OC2B) - Timer2 Channel B
+    LED L:       PB5 (Pin 13) - Yellow LED    **/
+
+#define D3_PWM_DDR   DDRD
+#define D3_PWM_PORT  PORTD
+#define D3_PWM_BIT   PD3
+
+#define LEDL_DDR     DDRB
+#define LEDL_PORT    PORTB
+#define LEDL_BIT     PB5
+
 //Whatever value is written into OCR1A controls the servo position
 //Timer1 generates the PWM signal and OCR1A defines the pulse width
 
