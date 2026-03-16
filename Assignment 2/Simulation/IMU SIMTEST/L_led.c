@@ -39,10 +39,10 @@ void imu_led_update(float yaw)
 {
     if ((yaw > YAW_LIMIT) || (yaw < -YAW_LIMIT))
     {
-        led_on();   // yaw outside ±85°
+        led_off();   // yaw outside ±85°
     }
     else
     {
-        led_off();  // yaw within range
+        led_on();  // yaw within range
     }
 }
