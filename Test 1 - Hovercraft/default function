@@ -1,1 +1,5 @@
+//This code is the "Stabilizing" function
+//Most of it is abstraction, assuming some of the functions exist
+//This function is supposed to be run in a loop, with no break condition
+
 
