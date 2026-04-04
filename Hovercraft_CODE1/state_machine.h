@@ -26,7 +26,7 @@ typedef enum {
 /*================ GLOBAL VARIABLES =======================*/
 
 //Current State of the hovercraft - USED BY control.c TO DETERMINE BEHAVIOUR
-extern State state; //extern makes it global btw
+extern State state; //extesrn makes it global btw
 
 //Direction of current turn
 //Used in control.c to set servo angle (+85 or -85)
@@ -41,11 +41,6 @@ extern float yaw_start;
 //This is used in control.c for PD correction (in recenter state and straight state)
 extern float yaw_target;
 
-//This is a counter for how many 90 deg turns have been done
-// 0 means not started
-// 1 means first 90° done
-// 2 means full 180° done
-extern uint8_t turn_count;
 
 /*=============Functions=================*/
 
