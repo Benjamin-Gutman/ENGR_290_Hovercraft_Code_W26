@@ -1,62 +1,153 @@
-#ifndef STATE_MACHINE_H
-#define STATE_MACHINE_H
+//This contains the state logic of the hovercraft
+//This code decided WHAT the hovercraft should do next, NO CONTROL
 
+//Angle logic is correct assuming turning left INCREASES YAW and turning right DECREASES YAW --need to check this
+//
+
+#include "state_machine.h"
 #include <stdint.h>
+#include <math.h>
+#include "sensors.h"
+
+/*================Global state===================*/
+
+//Current state:
+
+State state = STATE_STRAIGHT; //Default state, doesn't matter
+
+//Direction of the upcoming turn
+TurnDirection turn_dir = TURN_RIGHT; //Default state, doesn't matter
+
+//Yaw variables:
+float yaw_start = 0.0f; //This is the yaw when a turn begins
+float yaw_target = 0.0f; //This is the DESIRED yaw after a turn
+
+/*================ Constants ==================*/
+//These are most of the threshold, to be tuned and fixed later
+
+#define TURN_THRESHOLD 30.0f //cm
+//This is the front sensor reading to detect an upcoming turn
+#define SIDE_OPEN_THRESHOLD 40.0f //cm
+//This is the gap, this is if left side is open
+#define YAW_TOLERANCE 5.0f //deg
+//Acceptable tolerance, just put 5 degrees for  now
+
+/*=============Helper funcs==============*/
+
+//This function makes sure the result is always between -180 and +180, it's an angle wrapper
+//Takes the difference of angle a - b, and returns converted value (range of -180 to +180)
+float angle_diff(float a, float b) {
+    float diff = a - b;
+
+    while (diff > 180.0f) {
+        diff -= 360.0f; //subtracts 360 until reaches within bound
+    }
+    while (diff < -180.0f) {
+        diff += 360.0f; //adds 360 until reaches within bound
+    }
+
+    return diff;
+}
+
+//State changer
+void enter_state(State new_state) {
+    state = new_state;
+}
 
 
-/* ================ ENUM DEFINITIONS ========================*/
+/*=================STATE MACHINE========================*/
 
-//States of the hovercraft
-typedef enum {
-    STATE_STRAIGHT,        // Moving forward, stabilizing heading
-    STATE_PREPARE_TURN,    // Decide turn direction and initialize variables
-    STATE_TURN,            // Performing 180° turn (two times 90°)
-    STATE_RECENTER,        // Stabilizing after turn using yaw control
-    // STATE_FAILSAFE         // Optional safety state (not sure if we want to use)
-} State;
+//This function is supposed to be run in the main loop,
+//It updates the state based on sensor inputs
 
-
-//Turn direction
-typedef enum {
-    TURN_LEFT,
-    TURN_RIGHT
-} TurnDirection;
-
-
-/*================ GLOBAL VARIABLES =======================*/
-
-//Current State of the hovercraft - USED BY control.c TO DETERMINE BEHAVIOUR
-extern State state; //extesrn makes it global btw
-
-//Direction of current turn
-//Used in control.c to set servo angle (+85 or -85)
-extern TurnDirection turn_dir;
-//Determined in the PREPARE STATE
-
-//Yaw at the beginning of a 90° turn
-// Used internally to measure how much we have turned
-extern float yaw_start;
-
-//This is the final DESIRED yaw for a full 180 turn
-//This is used in control.c for PD correction (in recenter state and straight state)
-extern float yaw_target;
+void update_state(void) {
+    switch (state) {
+        /*------------------*/
+        case STATE_STRAIGHT:
+            /*-----------------*/
+        {
+            //Detects upcoming turn using the front sensor:
+            if (left_cm > SIDE_OPEN_THRESHOLD || front_cm < TURN_THRESHOLD) {
+                enter_state(STATE_PREPARE_TURN);
+            } //This account for LAST EXIT and any turn
+            break;
+        }
 
 
-/*=============Functions=================*/
-
-//Called in main loop, updates the state
-void update_state(void);
-
-//Changes current state, helper function
-void enter_state(State new_state);
+        /*------------------*/
+        case STATE_PREPARE_TURN: //This is the state where direction is determined
+            /*-----------------*/ {
+            //Save yaw at the start of a turn
+            yaw_start = yaw_deg;
 
 
+            //Decide direction using left sensor:
+            if (left_cm > SIDE_OPEN_THRESHOLD) {
+                turn_dir = TURN_LEFT;
+            } else {
+                turn_dir = TURN_RIGHT;
+            }
 
-//Computers wrapped angle diff in degrees
-//Range [-180, +180]
-float angle_diff(float a, float b); //ORDER MATTERS
-//angle_diff(target, current) returns error for PD
-//angle_diff(current, start) returns how much craft has turned
+            //This sets the final desired yaw, after a turn
+            if (turn_dir == TURN_LEFT) {
+                yaw_target = yaw_deg + 180.0f;
+            } else {
+                yaw_target = yaw_deg - 180.0f;
+            }
+
+            //GO to turn state directly (we can add a delay here)
+            enter_state(STATE_TURN);
+            break;
+        }
 
 
-#endif
+        /*------------------*/
+        case STATE_TURN:
+            /*-----------------*/
+        {
+            // difference = how much we have rotated since yaw_start (in degs)
+            float difference = angle_diff(yaw_deg, yaw_start);
+
+            //LEFT TURN:
+            if (turn_dir == TURN_LEFT && difference >= 180.0f) {
+
+                    enter_state(STATE_RECENTER);
+
+                }
+
+            //RIGHT TURN:
+            else if (turn_dir == TURN_RIGHT && difference <= -180.0f) {
+
+                    enter_state(STATE_RECENTER);
+
+            }
+
+            break;
+        }
+
+
+        /*------------------*/
+        case STATE_RECENTER:
+            /*-----------------*/
+        {
+            //Check if aligned with target heading:
+            float error = angle_diff(yaw_deg, yaw_target); //Calculates how much correction we need, in between a turn
+
+            if (fabs(error) < YAW_TOLERANCE) {
+                yaw_target = yaw_deg;
+                //the new heading target is the yaw that it is at right now, assuming its recentered correctly - very important for PD controller
+
+                enter_state(STATE_STRAIGHT);
+            }
+
+            break;
+        }
+
+        // /*------------------*/
+        // case STATE_FAILSAFE:
+        //     /*-----------------*/
+        // {
+        //     break;
+        // } //not used yet
+    }
+}
