@@ -133,6 +133,14 @@ void update_state(void) {
             //Check if aligned with target heading:
             float error = angle_diff(yaw_deg, yaw_target); //Calculates how much correction we need, in between a turn
 
+            // THIS allows immediate turn if a gap to the left is detected (at exit phase)
+            //Uncomment this if necessary -- must test first
+
+            // if (left_cm > SIDE_OPEN_THRESHOLD) {
+            //     enter_state(STATE_PREPARE_TURN);
+            //     break;
+            // }
+
             if (fabs(error) < YAW_TOLERANCE) {
                 yaw_target = yaw_deg;
                 //the new heading target is the yaw that it is at right now, assuming its recentered correctly - very important for PD controller
