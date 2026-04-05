@@ -1,9 +1,22 @@
 TO DO:
+VERIFY PINS:
+left IR → ADC0 / PC0
+front IR → ADC1 / PC1
+battery → ADC2 / PC2
+lift PWM → PD6 / OC0A
+thrust PWM → PB3 / OC2A
+servo → PB1 / OC1A
 
+
+
+
+
+///DONE
 1 - ADD FAN CODE (Lift and thrust)
 2 - ADD SENSOR CODES
 3 - ADD BATTERY CODE
 4 - CREATE MAIN
+
 
 main should look something like this:
 
