@@ -1,38 +1,37 @@
-#define F_CPU 16000000UL
-
 #include <avr/io.h>
 #include <stdint.h>
 #include "lift.h"
 
-/* ===================== CONFIGURATION ===================== */
-
-/* Lift fan PWM output pin
-   OC0A = PD6 on ATmega328P */
+/* Lift fan is connected to P4 -> PD6 / OC0A */
 #define LIFT_PWM_DDR    DDRD
-#define LIFT_PWM_PORT   PORTD
 #define LIFT_PWM_PIN    PD6
-
-/* ===================== STATE ===================== */
 
 static uint8_t lift_percent = 0;
 
-/* ===================== FUNCTIONS ===================== */
-
-void lift_init(void)
+/* Shared Timer0 setup for both fan channels:
+   - OC0A = PD6 = P4 = lift
+   - OC0B = PD5 = P3 = thrust */
+static void timer0_pwm_init_shared(void)
 {
-    /* Set PWM pin as output */
-    LIFT_PWM_DDR |= (1 << LIFT_PWM_PIN);
-
-    /* Timer0 Fast PWM, non-inverting mode on OC0A */
-    TCCR0A = 0;
-    TCCR0B = 0;
-
-    TCCR0A |= (1 << WGM01) | (1 << WGM00);   /* Fast PWM */
-    TCCR0A |= (1 << COM0A1);                 /* Non-inverting PWM */
+    /* Fast PWM mode, TOP = 0xFF */
+    TCCR0A |= (1 << WGM01) | (1 << WGM00);
 
     /* Prescaler = 64 */
     TCCR0B |= (1 << CS01) | (1 << CS00);
+}
 
+void lift_init(void)
+{
+    /* Set PD6 as output */
+    LIFT_PWM_DDR |= (1 << LIFT_PWM_PIN);
+
+    /* Initialize shared Timer0 mode */
+    timer0_pwm_init_shared();
+
+    /* Enable non-inverting PWM on OC0A */
+    TCCR0A |= (1 << COM0A1);
+
+    /* Start with lift off */
     OCR0A = 0;
     lift_percent = 0;
 }
