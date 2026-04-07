@@ -110,7 +110,7 @@ float filtered_cm = 0.0f;
 bool is_first_reading = true;
 
 void loop() {
-  int adc = readIR_Average(100);
+  int adc = readIR_Average(15);
   float vin = (float)adc * (VREF / 1023.0f);
 
   // This uses your piecewise calibration table
@@ -139,5 +139,5 @@ void loop() {
   Serial.print("  Filtered cm="); 
   Serial.println(filtered_cm, 2);
 
-  delay(100);
+  delay(50);
 }
