@@ -1,0 +1,2 @@
+float filtered_cm = 0.0f; 
+bool is_first_reading = true;
