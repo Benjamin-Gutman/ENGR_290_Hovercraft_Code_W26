@@ -140,26 +140,26 @@ void loop() {
 
   // Apply the Low-Pass Filter
   if (is_first_reading) {
-      filtered_cm = raw_cm;
+      filtered_cm = cm;
       is_first_reading = false;
   } else {
       // Calculate how big the jump is
-      float diff = abs(raw_cm - filtered_cm);
+      float diff = abs(cm - filtered_cm);
 
       if (diff > 15.0f) {
           // HUGE jump (e.g., 15cm to 45cm). It's real movement!
           // Snap instantly to the new value (0% old, 100% new)
-          filtered_cm = raw_cm;
+          filtered_cm = cm;
       } 
       else if (diff > 5.0f) {
           // Medium jump. Trust the new data a bit more.
           // (50% old, 50% new)
-          filtered_cm = (0.50f * filtered_cm) + (0.50f * raw_cm);
+          filtered_cm = (0.50f * filtered_cm) + (0.50f * cm);
       } 
       else {
           // Tiny jump. It's almost certainly electrical noise.
           // Filter heavily (85% old, 15% new)
-          filtered_cm = (0.85f * filtered_cm) + (0.15f * raw_cm);
+          filtered_cm = (0.85f * filtered_cm) + (0.15f * cm);
       }
   }
   
