@@ -199,24 +199,44 @@ void sensors_init(void)
     _delay_ms(100);
 }
 
-void update_sensors(void)
+void sensors_init(void)
 {
-    /* Read IR sensors */
+    adc_init_external_aref();
+
+    I2C_init();
+    _delay_ms(100);
+
+    mpu6050_init();
+    mpu6050_set_accel_range(AFS_2G);
+    mpu6050_set_gyro_range(GFS_500DPS);   /* or GFS_250DPS if you prefer */
+    mpu6050_set_dlpf(3);
+    mpu6050_set_sample_rate_div(7);
+
+    imu_reset_state(&imu);
+    imu_calibrate(&imu, 500);
+
+    _delay_ms(100);
+}
+
+void update_ir_sensors(void)
+{
     left_adc  = read_ir_average(LEFT_ADC_CHANNEL, IR_SAMPLES);
     front_adc = read_ir_average(FRONT_ADC_CHANNEL, IR_SAMPLES);
 
-    /* Convert ADC to distance */
     left_cm  = cm_from_adc_piecewise_extrap(left_adc,  cal_left,  CAL_LEFT_N);
     front_cm = cm_from_adc_piecewise_extrap(front_adc, cal_front, CAL_FRONT_N);
+}
 
-    /* Update IMU only if initialization succeeded */
-    if (imu_ready) {
-        if (imu_update(&imu, SENSOR_DT_S) == 0) {
-            yaw_deg = imu.yaw_deg;
-            yaw_rate_dps = imu.gz_dps;
-        }
-    } else {
-        yaw_deg = 0.0f;
-        yaw_rate_dps = 0.0f;
+void update_imu_sensor(float dt_s)
+{
+    if (imu_update(&imu, dt_s) == 0) {
+        yaw_deg = imu.yaw_deg;
+        yaw_rate_dps = imu.gz_dps;
     }
+}
+
+void update_sensors(float dt_s)
+{
+    update_ir_sensors();
+    update_imu_sensor(dt_s);
 }
