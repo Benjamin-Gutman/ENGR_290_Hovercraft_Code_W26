@@ -11,27 +11,20 @@
 
 /* ===================== CONFIGURATION ===================== */
 
-/* Measured external analog reference voltage */
-#define ADC_AREF_V          4.96f
-
-/* ADC channel assignment */
 #define LEFT_ADC_CHANNEL    0   /* ADC0 / PC0 */
 #define FRONT_ADC_CHANNEL   1   /* ADC1 / PC1 */
 
-/* Number of samples averaged for each IR reading */
 #define IR_SAMPLES          4
 
-/* Fixed dt used by imu_update()
-   Keep in mind this is only correct if your loop timing is close to 10 ms. */
+/* Keep this matched to your main loop if you are still using fixed dt */
 #define SENSOR_DT_S         0.010f
 
-/* Useful IR measurement range */
 #define IR_MIN_VALID_CM     7.0f
 #define IR_MAX_VALID_CM     80.0f
 
 /* ===================== GLOBAL VARIABLES ===================== */
 
-float left_cm = 0.0f;
+float left_cm = 200.0f;
 float front_cm = 200.0f;
 
 uint16_t left_adc = 0;
@@ -41,6 +34,10 @@ float yaw_deg = 0.0f;
 float yaw_rate_dps = 0.0f;
 
 imu_state_t imu;
+
+/* ===================== INTERNAL FLAGS ===================== */
+
+static uint8_t imu_ready = 0;
 
 /* ===================== IR CALIBRATION ===================== */
 
@@ -90,21 +87,20 @@ static const CalPoint cal_front[] = {
 
 static void adc_init_external_aref(void)
 {
-    /* External AREF:
-       REFS1 = 0, REFS0 = 0 */
+    /* External AREF */
     ADMUX = 0x00;
 
-    /* Enable ADC, prescaler 128 -> 125 kHz ADC clock */
+    /* Enable ADC, prescaler 128 -> 125 kHz */
     ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);
     ADCSRB = 0;
 
-    /* Disable digital input buffers on ADC0 and ADC1 */
+    /* Disable digital input buffer on ADC0 and ADC1 */
     DIDR0 |= (1 << LEFT_ADC_CHANNEL) | (1 << FRONT_ADC_CHANNEL);
 }
 
 static uint16_t adc_read_channel_blocking(uint8_t channel)
 {
-    /* Keep the high bits of ADMUX unchanged, only replace MUX bits */
+    /* Preserve upper ADMUX bits, only replace channel select bits */
     ADMUX = (ADMUX & 0xF0) | (channel & 0x07);
     _delay_us(10);
 
@@ -183,18 +179,22 @@ void sensors_init(void)
     I2C_init();
     _delay_ms(100);
 
-    mpu6050_init();
-    mpu6050_set_accel_range(AFS_2G);
-
-    /* Use 500 dps for testing if yaw is under-reading during manual turns.
-       If you want the original setting, replace with GFS_250DPS. */
-    mpu6050_set_gyro_range(GFS_500DPS);
-
-    mpu6050_set_dlpf(3);
-    mpu6050_set_sample_rate_div(7);
-
+    imu_ready = 0;
     imu_reset_state(&imu);
-    imu_calibrate(&imu, 500);
+    yaw_deg = 0.0f;
+    yaw_rate_dps = 0.0f;
+
+    if (mpu6050_init() == 0) {
+        mpu6050_set_accel_range(AFS_2G);
+        mpu6050_set_gyro_range(GFS_500DPS);
+        mpu6050_set_dlpf(3);
+        mpu6050_set_sample_rate_div(7);
+
+        imu_reset_state(&imu);
+        imu_calibrate(&imu, 500);
+
+        imu_ready = 1;
+    }
 
     _delay_ms(100);
 }
@@ -209,9 +209,14 @@ void update_sensors(void)
     left_cm  = cm_from_adc_piecewise_extrap(left_adc,  cal_left,  CAL_LEFT_N);
     front_cm = cm_from_adc_piecewise_extrap(front_adc, cal_front, CAL_FRONT_N);
 
-    /* Update IMU */
-    if (imu_update(&imu, SENSOR_DT_S) == 0) {
-        yaw_deg = imu.yaw_deg;
-        yaw_rate_dps = imu.gz_dps;
+    /* Update IMU only if initialization succeeded */
+    if (imu_ready) {
+        if (imu_update(&imu, SENSOR_DT_S) == 0) {
+            yaw_deg = imu.yaw_deg;
+            yaw_rate_dps = imu.gz_dps;
+        }
+    } else {
+        yaw_deg = 0.0f;
+        yaw_rate_dps = 0.0f;
     }
 }
