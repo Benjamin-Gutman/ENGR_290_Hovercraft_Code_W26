@@ -1,50 +1,38 @@
 #define F_CPU 16000000UL
 
 #include <Arduino.h>
-#include <avr/io.h>
-#include <util/delay.h>
-#include <stdint.h>
-
-#include "servo.h"
-#include "thrust.h"
-#include "lift.h"
 #include "sensors.h"
-#include "battery.h"
-#include "state_machine.h"
-#include "control.h"
+#include "IMU.h"
+
+static unsigned long last_us = 0;
 
 void setup()
 {
     Serial.begin(115200);
 
-    timer1_servo_init();
-    thrust_init();
-    lift_init();
-
     sensors_init();
-    battery_init();
+
+    /* Override gyro range for test */
+    mpu6050_set_gyro_range(GFS_500DPS);
 
     delay(300);
 
-    update_sensors();
-    battery_update();
-
-    yaw_target = yaw_deg;
-
-    set_servo_angle(0.0f);
-    set_thrust(0);
-    set_lift(100);
-
-    delay(300);
+    last_us = micros();
 }
 
 void loop()
 {
-    update_sensors();
+    unsigned long now_us = micros();
+    float dt = (now_us - last_us) * 1e-6f;
+    last_us = now_us;
 
-    Serial.print("YAW: ");
-    Serial.print(imu.yaw_deg, 3);
-    Serial.println(" deg");
+    if (imu_update(&imu, dt) == 0) {
+        Serial.print("gz_dps: ");
+        Serial.print(imu.gz_dps, 3);
 
-    delay(10);
+        Serial.print("   yaw_deg: ");
+        Serial.println(imu.yaw_deg, 3);
+    }
+
+    delay(5);
 }
