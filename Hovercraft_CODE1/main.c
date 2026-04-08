@@ -11,80 +11,85 @@
 #include "state_machine.h"
 #include "control.h"
 
+/* ===================== USER SETTINGS ===================== */
+
 /* Lift fan command used to keep the craft hovering.
-   This value must be tuned experimentally. */
-#define LIFT_CRUISE_PERCENT   75
+   Tune this experimentally. */
+#define LIFT_CRUISE_PERCENT     75
+
+/* Main loop delay.
+   Keep this close to the dt assumed inside sensors.c */
+#define MAIN_LOOP_DELAY_MS      10
+
+/* Update battery every N loops */
+#define BATTERY_LOOP_DIVIDER_MAX 20
 
 int main(void)
 {
-    /* This divider is used so the battery is not updated every single loop */
     uint8_t battery_loop_divider = 0;
 
     /* ===================== INITIALIZATION ===================== */
 
-    /* Initialize actuator modules first */
+    /* Initialize actuator modules */
     timer1_servo_init();
     thrust_init();
     lift_init();
 
-    /* Initialize sensors */
+    /* Initialize sensors and battery monitor */
     sensors_init();
     battery_init();
 
     /* Small startup delay to let hardware settle */
     _delay_ms(300);
 
-    /* First sensor update before defining the initial yaw target */
+    /* First sensor read before defining heading target */
     update_sensors();
     battery_update();
 
-    /* The first heading target is the direction the craft is facing at startup */
+    /* Initial heading target = heading at startup */
     yaw_target = yaw_deg;
 
-    /* Start from safe outputs */
+    /* Safe startup outputs */
     set_servo_angle(0.0f);
     set_thrust(0);
-
-    /* Start lift fan so the craft can hover */
     set_lift(LIFT_CRUISE_PERCENT);
 
-    /* Optional extra delay before entering the main loop */
+    /* Optional extra delay before starting mission */
     _delay_ms(300);
 
     /* ===================== MAIN LOOP ===================== */
 
     while (1)
     {
-        /* Read IR sensors and IMU */
+        /* Read sensors */
         update_sensors();
 
-        /* Update battery less frequently than the main control loop */
+        /* Update battery at a slower rate */
         battery_loop_divider++;
-        if (battery_loop_divider >= 20) {
+        if (battery_loop_divider >= BATTERY_LOOP_DIVIDER_MAX) {
             battery_loop_divider = 0;
             battery_update();
         }
 
-        /* Optional low-battery safety behavior */
+        /* Low battery safety */
         if (battery_is_low()) {
             set_thrust(0);
             set_lift(0);
             set_servo_angle(0.0f);
 
-            /* Stay here if battery is too low */
             while (1) {
                 _delay_ms(100);
             }
         }
 
-        /* Update autonomous logic */
+        /* Update autonomous mission logic */
         update_state();
 
-        /* Apply servo + thrust control according to the current state */
+        /* Apply control outputs for current state */
         apply_control();
 
-        /* Main control loop period: about 10 ms */
-        _delay_ms(10);
+        /* Keep loop timing approximately constant */
+        _delay_ms(MAIN_LOOP_DELAY_MS);
     }
 
     return 0;
