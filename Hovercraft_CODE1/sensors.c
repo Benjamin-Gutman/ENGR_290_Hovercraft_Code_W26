@@ -12,17 +12,17 @@
 /* ===================== CONFIGURATION ===================== */
 
 /* Measured external analog reference voltage */
-#define ADC_AREF_V          4.64f
+#define ADC_AREF_V          4.96f
 
-/* ADC channel assignment
-   Adjust these if your wiring is different */
+/* ADC channel assignment */
 #define LEFT_ADC_CHANNEL    0   /* ADC0 / PC0 */
 #define FRONT_ADC_CHANNEL   1   /* ADC1 / PC1 */
 
 /* Number of samples averaged for each IR reading */
-#define IR_SAMPLES          32
+#define IR_SAMPLES          4
 
-/* Loop time used by imu_update() */
+/* Fixed dt used by imu_update()
+   Keep in mind this is only correct if your loop timing is close to 10 ms. */
 #define SENSOR_DT_S         0.010f
 
 /* Useful IR measurement range */
@@ -49,8 +49,6 @@ typedef struct {
     uint16_t adc;
 } CalPoint;
 
-/* Left IR calibration table
-   Replace later if you measure a separate table for the left sensor */
 static const CalPoint cal_left[] = {
     {  7, 682 },
     {  8, 670 },
@@ -68,9 +66,6 @@ static const CalPoint cal_left[] = {
     { 80, 112 }
 };
 
-/* Front IR calibration table
-   For now it is the same as the left sensor.
-   Replace it if the front sensor behaves differently. */
 static const CalPoint cal_front[] = {
     {  7, 682 },
     {  8, 670 },
@@ -95,7 +90,7 @@ static const CalPoint cal_front[] = {
 
 static void adc_init_external_aref(void)
 {
-    /* Use external AREF:
+    /* External AREF:
        REFS1 = 0, REFS0 = 0 */
     ADMUX = 0x00;
 
@@ -103,13 +98,14 @@ static void adc_init_external_aref(void)
     ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);
     ADCSRB = 0;
 
-    /* Disable digital input buffers on used ADC pins */
+    /* Disable digital input buffers on ADC0 and ADC1 */
     DIDR0 |= (1 << LEFT_ADC_CHANNEL) | (1 << FRONT_ADC_CHANNEL);
 }
 
 static uint16_t adc_read_channel_blocking(uint8_t channel)
 {
-    ADMUX = (channel & 0x07);
+    /* Keep the high bits of ADMUX unchanged, only replace MUX bits */
+    ADMUX = (ADMUX & 0xF0) | (channel & 0x07);
     _delay_us(10);
 
     ADCSRA |= (1 << ADSC);
@@ -125,7 +121,6 @@ static uint16_t read_ir_average(uint8_t channel, uint8_t n_samples)
 
     for (i = 0; i < n_samples; i++) {
         sum += adc_read_channel_blocking(channel);
-        _delay_ms(2);
     }
 
     return (uint16_t)(sum / n_samples);
@@ -190,7 +185,11 @@ void sensors_init(void)
 
     mpu6050_init();
     mpu6050_set_accel_range(AFS_2G);
-    mpu6050_set_gyro_range(GFS_250DPS);
+
+    /* Use 500 dps for testing if yaw is under-reading during manual turns.
+       If you want the original setting, replace with GFS_250DPS. */
+    mpu6050_set_gyro_range(GFS_500DPS);
+
     mpu6050_set_dlpf(3);
     mpu6050_set_sample_rate_div(7);
 
