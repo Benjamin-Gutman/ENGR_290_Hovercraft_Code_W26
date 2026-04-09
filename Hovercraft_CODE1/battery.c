@@ -21,8 +21,8 @@
 
 /* 2S LiPo thresholds */
 #define BATTERY_FULL_V          8.40f
-#define BATTERY_LOW_THRESHOLD_V 5.00f
-#define BATTERY_EMPTY_V         3.40f
+#define BATTERY_LOW_THRESHOLD_V 7.00f
+#define BATTERY_EMPTY_V         6.60f
 
 /* ===================== GLOBALS ===================== */
 
