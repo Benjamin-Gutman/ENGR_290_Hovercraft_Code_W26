@@ -13,16 +13,7 @@
 /* Battery divider ADC channel */
 #define BATTERY_ADC_CHANNEL     2   /* ADC2 / PC2 */
 
-/* Calibrated divider gain:
-   V_bat = V_adc * BATTERY_DIVIDER_GAIN
-
-   Based on your measurements:
-   - real battery voltage ≈ 8.33 V
-   - ADC reading ≈ 550
-   - AREF ≈ 4.96 V
-
-   This gives a divider gain close to 3.12.
-*/
+/* Calibrated divider gain */
 #define BATTERY_DIVIDER_GAIN    3.12f
 
 /* Number of ADC samples averaged */
@@ -30,8 +21,8 @@
 
 /* 2S LiPo thresholds */
 #define BATTERY_FULL_V          8.40f
-#define BATTERY_LOW_THRESHOLD_V 7.20f
-#define BATTERY_EMPTY_V         6.80f
+#define BATTERY_LOW_THRESHOLD_V 5.00f
+#define BATTERY_EMPTY_V         3.40f
 
 /* ===================== GLOBALS ===================== */
 
@@ -41,11 +32,21 @@ uint8_t battery_percent = 0;
 
 /* ===================== ADC HELPERS ===================== */
 
+static void battery_adc_init_external_aref(void)
+{
+    /* External AREF */
+    ADMUX = 0x00;
+
+    /* Enable ADC, prescaler 128 */
+    ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);
+    ADCSRB = 0;
+}
+
 static uint16_t adc_read_channel_blocking(uint8_t channel)
 {
-    /* Keep external AREF, only change MUX bits */
+    /* Keep upper ADMUX bits, change only MUX bits */
     ADMUX = (ADMUX & 0xF0) | (channel & 0x07);
-    _delay_us(10);
+    _delay_us(20);
 
     ADCSRA |= (1 << ADSC);
     while (ADCSRA & (1 << ADSC)) {}
@@ -70,6 +71,8 @@ static uint16_t battery_read_average(uint8_t n_samples)
 
 void battery_init(void)
 {
+    battery_adc_init_external_aref();
+
     /* Disable digital input buffer on ADC2 / PC2 */
     DIDR0 |= (1 << BATTERY_ADC_CHANNEL);
 }
