@@ -2,7 +2,9 @@
 #define BATTERY_H
 
 #include <stdint.h>
-
+#ifdef __cplusplus
+extern "C" {
+  #endif
 /* Raw ADC reading from the battery divider */
 extern uint16_t battery_adc;
 
