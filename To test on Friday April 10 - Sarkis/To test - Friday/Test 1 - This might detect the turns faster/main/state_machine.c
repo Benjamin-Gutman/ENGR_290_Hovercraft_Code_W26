@@ -29,7 +29,7 @@ static float yaw_prev = 0.0f;
 #define TURN_THRESHOLD 60.0f //cm
 //This is the front sensor reading to detect an upcoming turn
 
-#define YAW_TOLERANCE_TURN 20.0f //deg
+#define YAW_TOLERANCE_TURN 15.0f //deg
 //Craft won't detect turns until it's locked on target, tolerance
 
 #define SIDE_OPEN_THRESHOLD 48.0f //cm
