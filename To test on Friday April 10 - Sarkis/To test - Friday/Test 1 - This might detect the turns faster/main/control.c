@@ -29,7 +29,8 @@
 //Thrust values (placeholders values, not sure what they should be)
 #define THRUST_NORMAL 100
 #define THRUST_PREPARE 40
-#define THRUST_TURN 80
+#define THRUST_TURN_RIGHT 40
+#define THRUST_TURN_LEFT 80
 // #define THRUST_FAILSAFE 0
 
 
@@ -160,12 +161,15 @@ void apply_control(void) {
 
             if (turn_dir == TURN_LEFT) { //Decides servo behaviour depending on direction
                 servo_command = SERVO_LEFT_MAX;
+                  thrust_command = THRUST_TURN_LEFT;
+               
             }
             else {
                 servo_command = SERVO_RIGHT_MAX;
+               thrust_command = THRUST_TURN_RIGHT;
             } //This can be adjusted, depending on servo "left" and "right"
 
-            thrust_command = THRUST_TURN;
+         
             break;
         }
 
