@@ -29,7 +29,7 @@
 //Thrust values (placeholders values, not sure what they should be)
 #define THRUST_NORMAL 100
 #define THRUST_PREPARE 40
-#define THRUST_TURN 20
+#define THRUST_TURN 80
 // #define THRUST_FAILSAFE 0
 
 
