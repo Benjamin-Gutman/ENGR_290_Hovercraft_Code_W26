@@ -65,13 +65,12 @@ int main(void)
 
         // ---- SLOW IR UPDATE (every 5 loops ≈ 50 ms) ----
         
- //     ---- BATTERY UPDATE (slow) ----
+        // ---- BATTERY UPDATE (slow) ----
         battery_divider++;
-        // if (battery_divider >= 50) {   // every ~0.5 sec
-        //     battery_divider = 0;
-        //     battery_update();
-        //     while(1);
-        // }
+        if (battery_divider >= 50) {   // every ~0.5 sec
+            battery_divider = 0;
+            battery_update();
+        }
 
         // if (battery_is_low()) {
         //     set_thrust(0);

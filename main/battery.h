@@ -10,7 +10,7 @@ extern "C" {
 /* Raw ADC reading from the battery divider */
 extern uint16_t battery_adc;
 
-/* Estimated battery voltage in volts */
+/* Filtered battery voltage in volts */
 extern float battery_voltage_v;
 
 /* Estimated battery percentage 0..100 */
@@ -22,7 +22,7 @@ void battery_init(void);
 /* Update battery ADC, voltage, and percentage */
 void battery_update(void);
 
-/* Returns 1 if the battery is below the low-voltage threshold */
+/* Returns 1 only after low voltage is confirmed with hysteresis */
 uint8_t battery_is_low(void);
 #ifdef __cplusplus
 }

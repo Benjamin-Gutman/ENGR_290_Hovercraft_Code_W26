@@ -2,68 +2,50 @@
 #define STATE_MACHINE_H
 
 #include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* ================ ENUM DEFINITIONS ========================*/
 
-//States of the hovercraft
 typedef enum {
     STATE_STRAIGHT,        // Moving forward, stabilizing heading
-    STATE_PREPARE_TURN,    // Decide turn direction and initialize variables
-    STATE_TURN,            // Performing 180° turn (two times 90°)
-    STATE_RECENTER,        // Stabilizing after turn using yaw control
-    // STATE_FAILSAFE         // Optional safety state (not sure if we want to use)
+    STATE_PREPARE_TURN,    // Slow down and decide the crossing direction
+    STATE_TURN_1,          // First 90 degree turn into the crossing
+    STATE_CROSS_STRAIGHT,  // Hold heading while traversing the crossing
+    STATE_TURN_2,          // Second 90 degree turn to complete the maneuver
+    STATE_STOP_RECENTER,   // Pause after the turn once the straight corridor is detected
+    STATE_RECENTER,        // Stabilize on the final heading
+    // STATE_FAILSAFE
 } State;
 
-
-//Turn direction
 typedef enum {
     TURN_LEFT,
     TURN_RIGHT
 } TurnDirection;
 
-
 /*================ GLOBAL VARIABLES =======================*/
 
-//Current State of the hovercraft - USED BY control.c TO DETERMINE BEHAVIOUR
-extern State state; //extesrn makes it global btw
-
-//Direction of current turn
-//Used in control.c to set servo angle (+85 or -85)
+extern State state;
 extern TurnDirection turn_dir;
-//Determined in the PREPARE STATE
 
-//Yaw at the beginning of a 90° turn
-// Used internally to measure how much we have turned
-//extern float yaw_start; //unused?
-
-//This is the final DESIRED yaw for a full 180 turn
-//This is used in control.c for PD correction (in recenter state and straight state)
+/*
+ * Current desired heading.
+ * During the maneuver this changes from:
+ * straight -> first 90 degree target -> crossing straight target -> final target.
+ */
 extern float yaw_target;
-
-
-
 
 /*=============Functions=================*/
 
-//Called in main loop, updates the state
 void update_state(void);
-
-//Changes current state, helper function
 void enter_state(State new_state);
-
 float wrap_angle(float angle);
-
-
-//Computers wrapped angle diff in degrees
-//Range [-180, +180]
-float angle_diff(float a, float b); //ORDER MATTERS
-//angle_diff(target, current) returns error for PD
-//angle_diff(current, start) returns how much craft has turned
+float angle_diff(float a, float b);
 
 #ifdef __cplusplus
 }
 #endif
+
 #endif

@@ -1,190 +1,300 @@
-//This contains the state logic of the hovercraft
-//This code decided WHAT the hovercraft should do next, NO CONTROL
-
-//Angle logic is correct assuming turning left(CCW) INCREASES YAW and turning right(CW) DECREASES YAW --need to check this
-//NEED TO CHECK!
+// This contains the state logic of the hovercraft.
+// This code decides WHAT the hovercraft should do next, not HOW to control it.
 
 #include "state_machine.h"
-#include <stdint.h>
+
 #include <math.h>
+#include <stdint.h>
+
 #include "sensors.h"
 
-/*================Global state===================*/
+/*================ Global state ===================*/
 
-//Current state:
+State state = STATE_STRAIGHT;
+TurnDirection turn_dir = TURN_RIGHT;
+float yaw_target = 0.0f;
 
-State state = STATE_STRAIGHT; //Default state, doesn't matter
+static float final_yaw_target = 0.0f;
+static uint16_t cross_straight_counter = 0;
+static uint8_t can_left_turn = 1;
+static uint8_t cross_accumulation = 0;
+static uint16_t cross_lockout_counter = 255;
+static uint16_t straight_recovery_counter = 0;
+static uint8_t prepare_turn_counter = 0;
+static uint8_t startup_guard_counter = 0;
+static uint8_t front_turn_detect_counter = 0;
+static uint8_t stop_recenter_counter = 0;
+static uint8_t stop_recenter_wait_counter = 0;
 
-//Direction of the upcoming turn
-TurnDirection turn_dir = TURN_RIGHT; //Default state, doesn't matter
-
-//Yaw variables:
-float yaw_start = 0.0f; //This is the yaw when a turn begins
-float yaw_target = 0.0f; //This is the DESIRED yaw after a turn
-static float yaw_accum = 0.0f;
-static float yaw_prev = 0.0f;
 /*================ Constants ==================*/
-//These are most of the threshold, to be tuned and fixed later
 
-#define TURN_THRESHOLD 62.0f //cm
-//This is the front sensor reading to detect an upcoming turn
+#define TURN_THRESHOLD 60.0f
+#define SIDE_OPEN_THRESHOLD 48.0f
+#define SIDE_WALL_RESET_THRESHOLD 35.0f
 
-#define YAW_TOLERANCE_TURN 20.0f //deg
-//Craft won't detect turns until it's locked on target, tolerance
+#define TURN_SEGMENT_ANGLE_DEG 90.0f
 
-#define SIDE_OPEN_THRESHOLD 49.0f //cm
-//This is the gap, this is if left side is open
+#define YAW_TOLERANCE_START 20.0f
+#define TURN_FINISH_TOLERANCE 12.0f
+#define RECENTER_TOLERANCE 10.0f
 
-#define YAW_TOLERANCE 10.0f //deg
-//Acceptable tolerance, tolerance for completing a turn
+#define CROSS_STRAIGHT_MIN_LOOPS 8
+#define CROSS_STRAIGHT_TARGET_LOOPS 20
+#define SECOND_TURN_FRONT_TRIGGER_CM 38.0f
+#define STRAIGHT_LINE_FRONT_CLEAR_CM 52.0f
+#define STOP_RECENTER_HOLD_LOOPS 50
+#define STOP_RECENTER_MAX_WAIT_LOOPS 70
+#define PREPARE_BRAKE_MIN_LOOPS 50
+#define PREPARE_BRAKE_MAX_LOOPS 60
+#define STARTUP_GUARD_LOOPS 25
+#define FRONT_TURN_CONFIRM_LOOPS 3
+#define CROSS_POST_TURN_LOCKOUT_LOOPS 70
+#define CROSS_REPEAT_RESET_LOOPS 90
+#define CROSS_RESET_FRONT_CLEAR_CM 50.0f
+#define MAX_CONSECUTIVE_CROSSINGS 2
 
-int CAN_LEFT_TURN = 1;
+/*============= Helper funcs ==============*/
 
-
-/*=============Helper funcs==============*/
-
-//This function makes sure the result is always between -180 and +180, it's an angle wrapper
-//Takes the difference of angle a - b, and returns converted value (range of -180 to +180)
-float angle_diff(float a, float b) {
+float angle_diff(float a, float b)
+{
     float diff = a - b;
 
     while (diff > 180.0f) {
-        diff -= 360.0f; //subtracts 360 until reaches within bound
+        diff -= 360.0f;
     }
     while (diff < -180.0f) {
-        diff += 360.0f; //adds 360 until reaches within bound
+        diff += 360.0f;
     }
 
     return diff;
 }
 
-//State changer
-void enter_state(State new_state) {
+void enter_state(State new_state)
+{
     state = new_state;
 }
 
-float wrap_angle(float angle) {
-    while (angle > 180.0f) angle -= 360.0f;
-    while (angle < -180.0f) angle += 360.0f;
+float wrap_angle(float angle)
+{
+    while (angle > 180.0f) {
+        angle -= 360.0f;
+    }
+    while (angle < -180.0f) {
+        angle += 360.0f;
+    }
+
     return angle;
 }
 
-/*=================STATE MACHINE========================*/
-
-//This function is supposed to be run in the main loop,
-//It updates the state based on sensor inputs
-
-void update_state(void) {
-    // Re-enable left turns when a wall is detected again
-    if (left_cm < SIDE_OPEN_THRESHOLD) {
-      CAN_LEFT_TURN = 1;
+static float signed_turn_angle(TurnDirection direction)
+{
+    if (direction == TURN_LEFT) {
+        return TURN_SEGMENT_ANGLE_DEG;
     }
+
+    return -TURN_SEGMENT_ANGLE_DEG;
+}
+
+static uint8_t heading_is_aligned(float target_yaw_deg, float tolerance_deg)
+{
+    return (fabs(angle_diff(target_yaw_deg, yaw_deg)) <= tolerance_deg);
+}
+
+static void start_crossing_sequence(TurnDirection direction)
+{
+    float first_turn_delta = signed_turn_angle(direction);
+    float base_yaw = yaw_target;
+
+    yaw_target = wrap_angle(base_yaw + first_turn_delta);
+    final_yaw_target = wrap_angle(base_yaw + (2.0f * first_turn_delta));
+    cross_straight_counter = 0;
+}
+
+static uint8_t crossing_detection_enabled(void)
+{
+    return (cross_lockout_counter >= CROSS_POST_TURN_LOCKOUT_LOOPS) &&
+           (cross_accumulation < MAX_CONSECUTIVE_CROSSINGS);
+}
+
+static void update_crossing_memory(void)
+{
+    if (startup_guard_counter < STARTUP_GUARD_LOOPS) {
+        startup_guard_counter++;
+    }
+
+    if (cross_lockout_counter < CROSS_POST_TURN_LOCKOUT_LOOPS) {
+        cross_lockout_counter++;
+    }
+
+    if ((state == STATE_STRAIGHT) &&
+        heading_is_aligned(yaw_target, RECENTER_TOLERANCE) &&
+        (front_cm > CROSS_RESET_FRONT_CLEAR_CM) &&
+        (left_cm < SIDE_OPEN_THRESHOLD)) {
+        if (straight_recovery_counter < CROSS_REPEAT_RESET_LOOPS) {
+            straight_recovery_counter++;
+        }
+
+        if (straight_recovery_counter >= CROSS_REPEAT_RESET_LOOPS) {
+            cross_accumulation = 0;
+        }
+    } else {
+        straight_recovery_counter = 0;
+    }
+}
+
+static uint8_t front_turn_detected(void)
+{
+    if (front_cm <= TURN_THRESHOLD) {
+        if (front_turn_detect_counter < FRONT_TURN_CONFIRM_LOOPS) {
+            front_turn_detect_counter++;
+        }
+    } else {
+        front_turn_detect_counter = 0;
+    }
+
+    return (front_turn_detect_counter >= FRONT_TURN_CONFIRM_LOOPS);
+}
+
+static void reset_turn_detect_counters(void)
+{
+    front_turn_detect_counter = 0;
+}
+
+static uint8_t straight_line_detected(void)
+{
+    return (front_cm >= STRAIGHT_LINE_FRONT_CLEAR_CM) &&
+           (left_cm < SIDE_OPEN_THRESHOLD);
+}
+
+/*================= STATE MACHINE ========================*/
+
+void update_state(void)
+{
+    update_crossing_memory();
+
+    if (left_cm < SIDE_WALL_RESET_THRESHOLD) {
+        can_left_turn = 1;
+    }
+
     switch (state) {
-        /*------------------*/
         case STATE_STRAIGHT:
-            /*-----------------*/
         {
-            //Detects upcoming turn using the front sensor:
-            if ((left_cm > SIDE_OPEN_THRESHOLD && CAN_LEFT_TURN ==1 )|| front_cm < TURN_THRESHOLD) {
+            uint8_t left_cross_detected = ((left_cm > SIDE_OPEN_THRESHOLD) && (can_left_turn == 1));
+            uint8_t front_cross_detected = front_turn_detected();
 
-                if (fabs(angle_diff(yaw_target, yaw_deg)) < YAW_TOLERANCE_TURN){
-
+            if ((startup_guard_counter >= STARTUP_GUARD_LOOPS) &&
+                crossing_detection_enabled() &&
+                (left_cross_detected || front_cross_detected)) {
+                if (heading_is_aligned(yaw_target, YAW_TOLERANCE_START)) {
+                    if (left_cross_detected) {
+                        turn_dir = TURN_LEFT;
+                    } else {
+                        turn_dir = TURN_RIGHT;
+                    }
+                    prepare_turn_counter = 0;
+                    reset_turn_detect_counters();
                     enter_state(STATE_PREPARE_TURN);
-
                 }
+            }
 
-            } //This account for LAST EXIT and any turn
             break;
         }
 
-
-        /*------------------*/
-        case STATE_PREPARE_TURN: //This is the state where direction is determined
-            /*-----------------*/ {
-            //Save yaw at the start of a turn
-            
-            //Decide direction using left sensor:
-            if (left_cm > SIDE_OPEN_THRESHOLD) {
-                turn_dir = TURN_LEFT;
-            } else {
-                turn_dir = TURN_RIGHT;
-            }
-
-            //This sets the final desired yaw, after a turn
-            if (turn_dir == TURN_LEFT) {
-                //yaw_target = wrap_angle(yaw_deg + 180.0f);
-                yaw_target = wrap_angle(yaw_target + 180.0f);
-            } else {
-                //yaw_target = wrap_angle(yaw_deg - 180.0f);
-                yaw_target = wrap_angle(yaw_target - 180.0f);
-            }
-            yaw_prev = yaw_deg;
-            yaw_accum = 0.0f;
-            //GO to turn state directly (we can add a delay here) DO NOT ADD _MS_DELAY HERE!!! only add a counter if necessary
-            enter_state(STATE_TURN);
-            break;
-        }
-
-
-        /*------------------*/
-        case STATE_TURN:
-            /*-----------------*/
+        case STATE_PREPARE_TURN:
         {
-            // difference = how much we have rotated since yaw_start (in degs)
-            float delta = angle_diff(yaw_deg, yaw_prev);
-            yaw_accum += delta;
-            yaw_prev = yaw_deg;
+            prepare_turn_counter++;
 
-            
+            if ((prepare_turn_counter >= PREPARE_BRAKE_MIN_LOOPS) &&
+                ((front_cm <= TURN_THRESHOLD) ||
+                 (prepare_turn_counter >= PREPARE_BRAKE_MAX_LOOPS))) {
+                prepare_turn_counter = 0;
+                start_crossing_sequence(turn_dir);
+                enter_state(STATE_TURN_1);
+            }
+            break;
+        }
 
-            //LEFT TURN:
-            // if (turn_dir == TURN_LEFT ) {
-            //          if (yaw_accum >= 180.0f) {
-            //         enter_state(STATE_RECENTER);
-            //          }
-            //     }
-
-            // //RIGHT TURN:
-            // else if (turn_dir == TURN_RIGHT) {
-            //         if (yaw_accum <= -180.0f) {
-            //         enter_state(STATE_RECENTER);
-            //         }
-            // }
-
-            float abs_turn = fabs(yaw_accum);
-
-            if (abs_turn >= (180.0f - YAW_TOLERANCE)) {
-
-              if (turn_dir == TURN_LEFT) {
-                CAN_LEFT_TURN = 0; // disable future left turns
-              }
-              enter_state(STATE_RECENTER);
+        case STATE_TURN_1:
+        {
+            if (heading_is_aligned(yaw_target, TURN_FINISH_TOLERANCE)) {
+                cross_straight_counter = 0;
+                enter_state(STATE_CROSS_STRAIGHT);
             }
 
             break;
         }
 
+        case STATE_CROSS_STRAIGHT:
+        {
+            cross_straight_counter++;
 
-        /*------------------*/
+            if (cross_straight_counter >= CROSS_STRAIGHT_MIN_LOOPS) {
+                if ((front_cm < SECOND_TURN_FRONT_TRIGGER_CM) ||
+                    (cross_straight_counter >= CROSS_STRAIGHT_TARGET_LOOPS)) {
+                    yaw_target = final_yaw_target;
+                    enter_state(STATE_TURN_2);
+                }
+            }
+
+            break;
+        }
+
+        case STATE_TURN_2:
+        {
+            if (straight_line_detected() ||
+                heading_is_aligned(yaw_target, TURN_FINISH_TOLERANCE)) {
+                stop_recenter_counter = 0;
+                stop_recenter_wait_counter = 0;
+                enter_state(STATE_STOP_RECENTER);
+            }
+
+            break;
+        }
+
+        case STATE_STOP_RECENTER:
+        {
+            if (straight_line_detected()) {
+                if (stop_recenter_counter < STOP_RECENTER_HOLD_LOOPS) {
+                    stop_recenter_counter++;
+                }
+            } else if (stop_recenter_counter == 0) {
+                stop_recenter_counter = 0;
+            }
+
+            if (stop_recenter_wait_counter < STOP_RECENTER_MAX_WAIT_LOOPS) {
+                stop_recenter_wait_counter++;
+            }
+
+            if ((stop_recenter_counter >= STOP_RECENTER_HOLD_LOOPS) ||
+                (stop_recenter_wait_counter >= STOP_RECENTER_MAX_WAIT_LOOPS)) {
+                stop_recenter_counter = 0;
+                stop_recenter_wait_counter = 0;
+                enter_state(STATE_RECENTER);
+            }
+
+            break;
+        }
+
         case STATE_RECENTER:
-            /*-----------------*/
         {
-            //Check if aligned with target heading:
-            float error = angle_diff(yaw_target, yaw_deg); //Calculates how much correction we need, in between a turn
-            //MAKE SURE THE ORDER ABOVE IS CORRECT AFTER TESTING
+            float error = angle_diff(yaw_target, yaw_deg);
 
-            // THIS allows immediate turn if a gap to the left is detected (at exit phase)
-            //Uncomment this if necessary -- must test first
+            if (fabs(error) <= RECENTER_TOLERANCE) {
+                if (cross_accumulation < 255) {
+                    cross_accumulation++;
+                }
+                cross_lockout_counter = 0;
+                straight_recovery_counter = 0;
+                prepare_turn_counter = 0;
+                reset_turn_detect_counters();
+                stop_recenter_counter = 0;
+                stop_recenter_wait_counter = 0;
 
-            // if (left_cm > SIDE_OPEN_THRESHOLD) {
-            //     enter_state(STATE_PREPARE_TURN);
-            //     break;
-            // }
-            //This might break logic
-
-            if (fabs(error) < YAW_TOLERANCE) {
-               // yaw_target = yaw_deg;
-                //Changed, the yaw_target is the locked to either 0 or -180
+                if (turn_dir == TURN_LEFT) {
+                    can_left_turn = 0;
+                } else {
+                    can_left_turn = 1;
+                }
 
                 enter_state(STATE_STRAIGHT);
             }
@@ -192,11 +302,10 @@ void update_state(void) {
             break;
         }
 
-        // /*------------------*/
-        // case STATE_FAILSAFE:
-        //     /*-----------------*/
-        // {
-        //     break;
-        // } //not used yet
+        default:
+        {
+            enter_state(STATE_STRAIGHT);
+            break;
+        }
     }
 }

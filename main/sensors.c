@@ -15,9 +15,7 @@
 #define FRONT_ADC_CHANNEL   0   /* ADC0 / PC0 */ //USE F17 sensor for FRONT
 
 /* Reduced samples because the EMA filter handles the heavy lifting now */
-#define IR_SAMPLES              10  
-#define IR_SAMPLES_LEFT          6
-#define IR_SAMPLES_RIGHT         4  
+#define IR_SAMPLES          10  
 
 #define IR_MIN_VALID_CM     7.0f
 #define IR_MAX_VALID_CM     65.0f
