@@ -36,7 +36,7 @@
 #define THRUST_TURN_RIGHT 90
 #define THRUST_TURN_LEFT 90
 #define THRUST_SLOW 40 //USED in between turn
-
+#define THRUST_SLOW_STRAIGHT 50 //Used when slow mode is active
 //Slow down in straight state
 
 
@@ -145,7 +145,7 @@ void apply_control(void) {
 
             if (slow_mode){
                 servo_command = yaw_pd_control(yaw_target, yaw_deg);   
-                thrust_command = THRUST_SLOW;
+                thrust_command = THRUST_SLOW_STRAIGHT;
             }else{
                 servo_command = yaw_pd_control(yaw_target, yaw_deg);   
                 thrust_command = THRUST_NORMAL;
