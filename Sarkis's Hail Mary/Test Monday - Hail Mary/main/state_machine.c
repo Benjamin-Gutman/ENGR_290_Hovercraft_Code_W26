@@ -44,7 +44,7 @@ static float yaw_prev = 0.0f;
 #define INBETWEEN_COUNT 100.0f
 
 
-#define SLOW_DOWN 200.0f //Slow down timer for straight state
+#define SLOW_DOWN 400.0f //Slow down timer for straight state
 
 
 int CAN_LEFT_TURN = 1;
