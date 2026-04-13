@@ -65,6 +65,8 @@ float angle_diff(float a, float b) {
 void enter_state(State new_state) {
      if (new_state == STATE_PREPARE_TURN) {
         prepare_counter = 0;   // RESET HERE
+    }if (new_state == STATE_RECENTER) {
+        recenter_count = 0;  
     }
     state = new_state;
 }
@@ -187,8 +189,11 @@ void update_state(void) {
             /*-----------------*/
         {
             recenter_count++;
-            if(recenter_count >80){
-
+            
+            if (recenter_count < 80) {
+                break;
+            }
+            
             //Check if aligned with target heading:
               float error = angle_diff(yaw_target, yaw_deg); //Calculates how much correction we need, in between a turn
             //MAKE SURE THE ORDER ABOVE IS CORRECT AFTER TESTING
@@ -208,8 +213,8 @@ void update_state(void) {
 
                   enter_state(STATE_STRAIGHT);
               }
-              recenter_count = 0;
-            }
+              
+            
             break;
         }
 
