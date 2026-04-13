@@ -23,8 +23,8 @@
 
 //Servo angle limits in degrees
 //IF LOGIC IS REVERSED, DO NOT CHANGE VARIABLES, change RIGHT WITH LEFT INSTEAD
-#define SERVO_LEFT_MAX_PD -80.0f   //USED IN PD
-#define SERVO_RIGHT_MAX_PD 80.0f //USED IN PD
+#define SERVO_LEFT_MAX_PD -70.0f   //USED IN PD
+#define SERVO_RIGHT_MAX_PD 70.0f //USED IN PD
 #define SERVO_LEFT_MAX -78.0f  //USED IN TURNS
 #define SERVO_RIGHT_MAX 85.0f   //USED IN TURNS
 #define SERVO_CENTER 0.0f
@@ -32,7 +32,7 @@
 //Thrust values (placeholders values, not sure what they should be)
 #define THRUST_NORMAL 85
 #define THRUST_PREPARE 60
-#define THRUST_RECENTER 30
+#define THRUST_RECENTER 45
 #define THRUST_TURN_RIGHT 90
 #define THRUST_TURN_LEFT 90
 #define THRUST_SLOW 40 //USED in between turn
