@@ -157,10 +157,18 @@ void apply_control(void) {
         case STATE_PREPARE_TURN:
         /*--------------------------------------------------*/
         {
+         if(activate_stop == 1){
+            set_lift(0);
+            thrust_command = 0;
+            servo_command = SERVO_CENTER;
+            
+         }else{
+            
           set_lift(100);
           servo_command = SERVO_CENTER;
           thrust_command = THRUST_PREPARE;
-            break;
+         }
+           break;
         }
 
         /*--------------------------------------------------*/
