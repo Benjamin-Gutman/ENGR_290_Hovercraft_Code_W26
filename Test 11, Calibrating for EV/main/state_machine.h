@@ -43,7 +43,7 @@ extern TurnDirection turn_dir;
 //This is used in control.c for PD correction (in recenter state and straight state)
 extern float yaw_target;
 
-
+extern int activate_stop;
 
 
 /*=============Functions=================*/
