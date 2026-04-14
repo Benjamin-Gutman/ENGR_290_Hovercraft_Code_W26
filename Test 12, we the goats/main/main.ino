@@ -87,10 +87,6 @@ int main(void)
     
     //NOTE TO SARKIS
 
-   Serial.print(" left ");
- Serial.print(yaw_deg);
- Serial.println("  deg ");
-
 //This is good, test IMU AGAIN, for final, either keep serial.print();
     _delay_ms(10);  // EXACTLY matches LOOP_DT_S
     }
