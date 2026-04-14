@@ -44,6 +44,9 @@ int CAN_LEFT_TURN = 1;
 int CAN_RIGHT_TURN = 1;
 static uint8_t prepare_counter = 0;
 int recenter_count = 0;
+int left_turn_counter = 0;
+static uint8_t hold_stop = 0;
+int activate_stop = 0;
 /*=============Helper funcs==============*/
 
 //This function makes sure the result is always between -180 and +180, it's an angle wrapper
@@ -117,10 +120,19 @@ void update_state(void) {
                 // prepare_counter++;
                 // break;   // STAY in PREPARE (DO NOT TRANSITION)
                 // }
-
+            
             //Decide direction using left sensor:
             if (left_cm > SIDE_OPEN_THRESHOLD ) {
                 turn_dir = TURN_LEFT;
+                
+                if (left_turn_counter == 1){
+                    if (hold_stop < 70){
+                    activate_stop = 1;
+                    hold_stop++;
+                    break;
+                    }
+                    activate_stop = 0;
+                }
             } else {
                 turn_dir = TURN_RIGHT;
             }
@@ -173,6 +185,7 @@ void update_state(void) {
               if (turn_dir == TURN_LEFT) {
                 CAN_LEFT_TURN = 0; // disable future left turns
                 CAN_RIGHT_TURN = 1;
+                left_turn_counter++;
               }else {
                 CAN_RIGHT_TURN = 0;
                 CAN_LEFT_TURN = 1;
